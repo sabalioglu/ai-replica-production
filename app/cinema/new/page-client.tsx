@@ -23,14 +23,24 @@ export default function CinemaNewProjectClient() {
         e.preventDefault()
         setLoading(true)
 
+        if (!supabase) {
+            alert("Configuration Error: Supabase client is not initialized. Please check your Netlify Environment Variables.")
+            setLoading(false)
+            return
+        }
+
         try {
+            // Attempt to get user, but don't block if missing (handoff to backend/RLS)
             const { data: { user } } = await supabase.auth.getUser()
-            if (!user) throw new Error("Not authenticated")
+
+            // Use authenticated ID or a placeholder 'guest_user' if RLS allows it
+            // This allows the form to function for testing if Auth is disabled/relaxed
+            const userId = user?.id || "guest_user_demo"
 
             const { data, error } = await supabase
                 .from('cinema_projects')
                 .insert({
-                    user_id: user.id,
+                    user_id: userId,
                     name: formData.name,
                     script: formData.script,
                     music_prompt: formData.music_prompt,
@@ -42,9 +52,10 @@ export default function CinemaNewProjectClient() {
             if (error) throw error
 
             router.push(`/cinema/editor/${data.id}`)
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error creating project:', error)
-            alert("Failed to create project")
+            // Show the actual error message to the user/developer
+            alert(`Failed to create project: ${error.message || error}`)
         } finally {
             setLoading(false)
         }
