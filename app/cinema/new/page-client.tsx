@@ -23,8 +23,8 @@ export default function CinemaNewProjectClient() {
         e.preventDefault()
         setLoading(true)
 
-        if (!supabase) {
-            alert("Configuration Error: Supabase client is not initialized. Please check your Netlify Environment Variables.")
+        if (process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('placeholder')) {
+            alert("Configuration Error: Supabase environment variables are not set. Please contact support.")
             setLoading(false)
             return
         }

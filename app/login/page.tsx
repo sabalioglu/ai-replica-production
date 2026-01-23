@@ -22,7 +22,10 @@ export default function LoginPage() {
         setError(null)
 
         try {
-            if (!supabase) throw new Error("Supabase not initialized")
+            // Check if we're using placeholder values (means env vars not set)
+            if (process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('placeholder')) {
+                throw new Error("Configuration Error: Supabase environment variables are not set. Please contact support.")
+            }
 
             const { error } = await supabase.auth.signInWithPassword({
                 email,
@@ -34,7 +37,8 @@ export default function LoginPage() {
             router.push("/cinema")
             router.refresh()
         } catch (error: any) {
-            setError(error.message)
+            console.error('Login error:', error)
+            setError(error.message || 'Failed to connect to authentication service')
         } finally {
             setLoading(false)
         }
