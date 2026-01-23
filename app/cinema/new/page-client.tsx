@@ -30,17 +30,15 @@ export default function CinemaNewProjectClient() {
         }
 
         try {
-            // Attempt to get user, but don't block if missing (handoff to backend/RLS)
             const { data: { user } } = await supabase.auth.getUser()
 
-            // Use authenticated ID or a placeholder 'guest_user' if RLS allows it
-            // This allows the form to function for testing if Auth is disabled/relaxed
-            const userId = user?.id || "guest_user_demo"
+            // Reverted guest logic: Strict Auth is now enforced by Middleware + Client check
+            if (!user) throw new Error("Not authenticated. Please log in.")
 
             const { data, error } = await supabase
                 .from('cinema_projects')
                 .insert({
-                    user_id: userId,
+                    user_id: user.id,
                     name: formData.name,
                     script: formData.script,
                     music_prompt: formData.music_prompt,
@@ -54,7 +52,6 @@ export default function CinemaNewProjectClient() {
             router.push(`/cinema/editor/${data.id}`)
         } catch (error: any) {
             console.error('Error creating project:', error)
-            // Show the actual error message to the user/developer
             alert(`Failed to create project: ${error.message || error}`)
         } finally {
             setLoading(false)
