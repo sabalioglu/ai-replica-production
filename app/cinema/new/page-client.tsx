@@ -35,6 +35,21 @@ export default function CinemaNewProjectClient() {
             // Reverted guest logic: Strict Auth is now enforced by Middleware + Client check
             if (!user) throw new Error("Not authenticated. Please log in.")
 
+            // Check credit balance before creating project
+            const { getUserCredits, deductCredits } = await import('@/lib/credits')
+            const creditInfo = await getUserCredits(user.id)
+
+            if (!creditInfo) {
+                throw new Error("Unable to fetch credit balance. Please try again.")
+            }
+
+            const CREDITS_PER_PROJECT = 10 // Cost to create a project
+
+            if (creditInfo.balance < CREDITS_PER_PROJECT) {
+                throw new Error(`Insufficient credits. You have ${creditInfo.balance} credits, but need ${CREDITS_PER_PROJECT} to create a project.`)
+            }
+
+            // Create the project
             const { data, error } = await supabase
                 .from('cinema_projects')
                 .insert({
@@ -48,6 +63,14 @@ export default function CinemaNewProjectClient() {
                 .single()
 
             if (error) throw error
+
+            // Deduct credits after successful project creation
+            const deductResult = await deductCredits(user.id, CREDITS_PER_PROJECT, formData.name)
+
+            if (!deductResult.success) {
+                console.warn('Project created but credit deduction failed:', deductResult.error)
+                // Don't fail the entire operation, just log it
+            }
 
             router.push(`/cinema/editor/${data.id}`)
         } catch (error: any) {
