@@ -1,0 +1,33 @@
+headers = []
+redirects = []
+
+[functions]
+
+[functions."*"]
+
+[[plugins]]
+origin = "default"
+package = "@netlify/plugin-nextjs"
+
+[plugins.inputs]
+
+[build]
+publish = "/Users/sabalioglu/Desktop/KEMIK/ai-replica/.next"
+publishOrigin = "ui"
+commandOrigin = "ui"
+base = "/Users/sabalioglu/Desktop/KEMIK/ai-replica"
+command = "npm run build"
+
+[build.environment]
+
+[build.processing]
+
+[build.processing.css]
+
+[build.processing.html]
+
+[build.processing.images]
+
+[build.processing.js]
+
+[build.services]
