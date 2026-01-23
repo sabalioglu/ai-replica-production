@@ -18,11 +18,29 @@ interface Project {
 export default function CinemaDashboardClient() {
     const [projects, setProjects] = useState<Project[]>([])
     const [loading, setLoading] = useState(true)
+    const [credits, setCredits] = useState<number | null>(null)
     const router = useRouter()
 
     useEffect(() => {
         fetchProjects()
+        fetchCredits()
     }, [])
+
+    async function fetchCredits() {
+        try {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) return
+
+            const { getUserCredits } = await import('@/lib/credits')
+            const creditInfo = await getUserCredits(user.id)
+
+            if (creditInfo) {
+                setCredits(creditInfo.balance)
+            }
+        } catch (error) {
+            console.error('Error fetching credits:', error)
+        }
+    }
 
     async function fetchProjects() {
         try {
@@ -50,7 +68,14 @@ export default function CinemaDashboardClient() {
     return (
         <div className="space-y-4">
             <div className="flex items-center justify-between">
-                <h2 className="text-3xl font-bold tracking-tight">Projects</h2>
+                <div className="flex items-center gap-4">
+                    <h2 className="text-3xl font-bold tracking-tight">Projects</h2>
+                    {credits !== null && (
+                        <div className="px-3 py-1 bg-primary/10 text-primary rounded-full text-sm font-medium">
+                            {credits} Credits
+                        </div>
+                    )}
+                </div>
                 <Link href="/cinema/new">
                     <Button>
                         <Plus className="mr-2 h-4 w-4" /> Create New
