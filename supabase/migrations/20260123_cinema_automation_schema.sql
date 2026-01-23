@@ -187,5 +187,4 @@ GRANT EXECUTE ON FUNCTION log_generation_event(UUID, UUID, TEXT, TEXT, JSONB, TE
 
 COMMENT ON TABLE cinema_generation_logs IS 'Logs for AI Cinema video generation workflow - used for debugging and monitoring';
 COMMENT ON FUNCTION increment_completed_scenes IS 'Increments completed_scenes counter for a project';
-COMMENT ON FUNCTION check_all_scenes_completed IS 'Checks if all scenes in a project are completed';
-COMMENT ON FUNCTION log_generation_event IS 'Logs a generation event for debugging';
+COMMENT ON FUNCTION check
