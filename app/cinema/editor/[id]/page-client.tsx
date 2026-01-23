@@ -71,13 +71,34 @@ export default function CinemaEditorClient({ projectId }: { projectId: string })
     async function fetchData() {
         try {
             setLoading(true)
+
+            // First verify user is authenticated
+            const { data: { user }, error: userError } = await supabase.auth.getUser()
+
+            if (userError || !user) {
+                console.error('User not authenticated:', userError)
+                throw new Error('Not authenticated')
+            }
+
+            console.log('Fetching project:', projectId, 'for user:', user.id)
+
             const { data: projectData, error: projectError } = await supabase
                 .from('cinema_projects')
                 .select('*')
                 .eq('id', projectId)
                 .single()
 
-            if (projectError) throw projectError
+            if (projectError) {
+                console.error('Project fetch error:', projectError)
+                throw projectError
+            }
+
+            if (!projectData) {
+                console.error('Project not found:', projectId)
+                throw new Error('Project not found')
+            }
+
+            console.log('Project loaded:', projectData)
             setProject(projectData)
 
             const { data: scenesData, error: scenesError } = await supabase
@@ -88,8 +109,9 @@ export default function CinemaEditorClient({ projectId }: { projectId: string })
 
             if (scenesError) throw scenesError
             setScenes(scenesData || [])
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error fetching data:", error)
+            alert(`Failed to load project: ${error.message || 'Unknown error'}`)
         } finally {
             setLoading(false)
         }
