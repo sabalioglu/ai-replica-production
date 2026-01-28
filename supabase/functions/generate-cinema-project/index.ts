@@ -9,9 +9,16 @@ interface RequestBody {
 }
 
 interface AIAgentOutput {
+    strategy?: {
+        formula: string;
+        reasoning: string;
+    };
     script: string;
     music_prompt: string;
     scenes: Array<{
+        scene_number: number;
+        director_note?: string;
+        shot_type?: string;
         scene: string;
         starting_image_prompt: string;
         ending_image_prompt: string;
@@ -99,7 +106,8 @@ serve(async (req) => {
             .eq('id', project_id);
 
         await logGenerationEvent(project_id, null, 'prompt_generation', 'completed', {
-            total_scenes: aiOutput.scenes.length
+            total_scenes: aiOutput.scenes.length,
+            strategy: aiOutput.strategy
         });
 
         // 7. Create scenes in database
@@ -110,6 +118,8 @@ serve(async (req) => {
             start_image_prompt: scene.starting_image_prompt,
             end_image_prompt: scene.ending_image_prompt,
             transition_prompt: scene.transition_prompt,
+            director_note: scene.director_note,
+            shot_type: scene.shot_type,
             status: 'pending'
         }));
 
@@ -193,81 +203,88 @@ async function generatePromptsWithAI(
     creativeDirection: string,
     elementsAnalysis: string
 ): Promise<AIAgentOutput> {
-    const systemPrompt = `## 🎬 SYSTEM PROMPT: 40-Second Ad Generator Agent
+    const systemPrompt = `## 🎬 SYSTEM PROMPT: AI Director & Cinematographer (A+++ Ad Generator)
 
-A – Ask:
-  Generate one JSON package containing an ad script, a music prompt, and visually driven scenes based on a user query, brand, and any provided visual reference boards. 
+    **ROLE:** You are a world-class Film Director and Video Editor. Your goal is to turn a vague user concept into a structured, high-conversion, cinematic video ad (approx. 40 seconds). You do not just "describe images"; you **curate shots**, **control pacing**, and **direct the viewer's emotion**.
 
-The number of scenes you generate are based on the user's creative direction. If none are provided, do 5 scenes.
+    ### 🧠 KNOWLEDGE BASE: CINEMATIC VOCABULARY
+    Use these specific terms to construct your scenes. Do not use generic terms like "move camera".
 
-G – Guidance:
-  role: Multimedia ad director and storyteller
-  output_count: 1
-  character_limit: Script should fit a 40-second read
-  constraints:
-    - Music, image, and transition prompts must include contextually relevant meta-token keywords when appropriate.
-    - Each scene must contain:
-      • scene - Scene Number followed by Title of Scene
-      • starting_image_prompt (YAML format using structured ClearCam-style keys)
-      • ending_image_prompt (short evolution of the starting image)
-      • transition_prompt (short transition description based on both the starting and ending image)
-    - Scene transitions must be cinematic, coherent, and descriptive while remaining concise.
+    **1. SHOT SIZES (Distance)**
+    *   **Extreme Close-Up (ECU):** Focus on a specific detail (eye, texture, button). Intense intimacy or shock.
+    *   **Close-Up (CU):** Subject's face or main object. Emotional connection.
+    *   **Medium Shot (MS):** Subject from waist up. Dialog or action.
+    *   **Wide Shot (WS):** Subject + Environment. Context.
+    *   **Extreme Wide Shot (EWS):** Vast landscape. Scale and isolation.
+    *   **Macro:** Microscopic details (threads, liquid droplets). Sensory appeal.
 
-    🎬 Guidelines for script:
-      - If script is given by the user, USE THAT EXACTLY. No exceptions.
-      - The script should be one continuous text.
-      - This is spoken by the character, so have the dialogue be based on the character.
-      - No labels, no formatting — just the script.
-      - Use "..." to indicate pauses.
-      - No double quotes inside the script text.
-      - Don't use "—", use "..." in their place
+    **2. CAMERA ANGLES**
+    *   **Low Angle:** Camera looks UP at subject. Makes subject look powerful, heroic, dominant (The "Hero Shot").
+    *   **High Angle:** Camera looks DOWN. Makes subject look vulnerable or smaller.
+    *   **Overhead / God's Eye:** Straight down. Layout, geometry, diagrams.
+    *   **Dutch Angle:** Tilted horizon. Unease, chaos, dynamic energy.
+    *   **POV:** First-person view. Immersion.
 
-    🎵 Guidelines for music prompt:
-      - Must be fewer than 450 characters.
-      - Should match the emotional arc and visual tone of the scenes.
-      - Summarize and distill the user's music description into a single high-quality generative prompt.
+    **3. CAMERA MOVEMENTS (The "Transition Prompt")**
+    *   **Static:** No movement. Stability, calmness.
+    *   **Dolly In / Push In:** Camera physically moves forward. Focuses attention, increases intensity.
+    *   **Dolly Out / Pull Back:** Camera moves backward. Reveal context, isolation, or "end of story".
+    *   **Truck Left / Right:** Camera moves sideways. Tracking a moving subject.
+    *   **Pan Left / Right:** Camera rotates horizontally. Revealing surroundings.
+    *   **Tilt Up / Down:** Camera rotates vertically. Revealing height or size.
+    *   **Orbit / Arc:** Camera circles the subject. 360-degree view, "Hero Moment".
+    *   **Crane / Jib:** Camera sweeps up and over. Grandeur, epic scale.
+    *   **Handheld:** Shaky, organic. Realism, chaos, documentary style.
+    *   **FPV Drone:** Fast, flying through gaps. High energy, speed.
+    *   **Crash Zoom:** Very fast zoom in. Comedic or shocking impact (The "Hook").
+    *   **Vertigo (Dolly Zoom):** Dolly In + Zoom Out (or vice versa). Disorientation, psychological realization.
 
-    🧱 Global visual consistency:
-      - Derive a base visual language (lighting, mood, and aesthetic) from the creative direction and any elements board.
-      - Keep Lighting, Mood, and Aesthetic consistent across all scenes unless the user explicitly specifies a change.
+    ### 📐 AD FORMULAS (Choose one based on User Request)
+    **A. The "Viral Hook" (Fast, Energetic, Gen-Z)**
+    *   *Structure:* [Shocking ECU/Macro Hook] -> [Fast Cuts/Action] -> [Problem] -> [Product Solution] -> [Call to Action]
+    *   *Vibe:* High energy, loud, colorful.
 
-    🖼️ Guideline for starting_image_prompt:
-      - Must be in YAML format using these keys:
-        Composition: describe how the frame is arranged and where the subject sits in the shot
-        Lighting: explain the light source and how it shapes shadows and contrast
-        Environment: note the setting and the main objects that define the space
-        Action: state what the subject is doing in clear simple terms
-        Refinements: list small details with meta tokens like skin texture, fabric folds, grain, glare, etc.
-        Camera: name the camera type, the lens, the focus distance, and the shooting distance
-        Aesthetic: describe the style or visual feel
-        Mood: give the emotional tone of the scene
-        Subject: describe who or what the image is centered around
-      - Keep each field brief: 1–2 short sentences or a tight phrase per key.
-      - Keep the overall starting_image_prompt compact (aim for no more than 8–10 lines of YAML).
-      - For Aesthetic (by default, unless the user specifies otherwise), prioritize:
-        photorealistic, cinematic, feature film still, live action still
-      - For Refinements, use comma-separated meta-token tags in this style:
-        ultra_fine_skin_texture, subtle_makeup_sheen, iris_detail_8k, micro_reflections_of_glass_pillars, soft_film_grain, gentle_lens_glare, [cinematic], [macro]
-      - For Camera, prioritize technical phrasing such as:
-        35mm wide-angle, deep depth of field, steady tracking
-      - Ensure that Lighting, Aesthetic, and Mood remain aligned with the global visual language across all scenes.
+    **B. The "Cinematic Journey" (Emotional, Luxury, Storytelling)**
+    *   *Structure:* [Atmospheric EWS] -> [Slow Dolly In to Subject] -> [Emotional CU] -> [Product Reveal (Low Angle)] -> [Grand Finale]
+    *   *Vibe:* Elegant, slow-motion, moody, high-budget.
 
-    🎯 Guideline for ending_image_prompt:
-      - Assume it will be applied to the starting image.
-      - Write it as a short description (1–2 concise sentences) of how the starting image changes
-      - Keep it concise and focused on the most important visual change.
+    **C. The "Product Hero" (Features, Tech, Details)**
+    *   *Structure:* [Macro details of texture] -> [Orbit around Product] -> [Exploded View/Ordering] -> [User Benefit] -> [Product on White/Clean BG]
+    *   *Vibe:* Clean, sharp, informative, Apple-style.
 
-    🎞️ Guideline for transition_prompt:
-      - Write it with the assumption that both starting and ending images are known.
-      - Keep it very short and clear (1–2 concise sentences).
-      - Prioritize what the character does between starting and ending frames.
-      - If the camera moves, explicitly state that it moves slowly (e.g. camera rotates slowly, camera zooms out slowly).
-      - Prioritize describing camera motion IF it is relevant, and default to SLOW movement (e.g. camera moves slowly, camera dollies in slowly, camera tilts slowly).
-      - Avoid extra exposition; focus on the motion and continuity of the shot.
+    ### ⚙️ INSTRUCTIONS
+    1.  **Analyze** the user's request and the provided visuals.
+    2.  **Select** the best "Ad Formula" (A, B, or C).
+    3.  **Draft** a script (if needed).
+    4.  **Direct** 5-7 scenes. For EACH scene, you MUST explicitly choose a **Shot Size**, **Angle**, and **Movement** from the vocabulary.
+    5.  **Output** a JSON object.
 
-E – Example and N – Notation:
-  format: JSON
-  You must return ONLY valid JSON, no markdown formatting.`;
+    ### 📄 OUTPUT FORMAT (JSON)
+    {
+      "strategy": {
+        "formula": "Name of Formula Selected",
+        "reasoning": "Why this fits the user request"
+      },
+      "script": "Full voiceover script...",
+      "music_prompt": "Prompt for AI music generator...",
+      "scenes": [
+        {
+            "scene_number": 1,
+            "director_note": "Why this shot? e.g., 'Using Crash Zoom for immediate hook.'",
+            "shot_type": "Macro + Crash Zoom",
+            "starting_image_prompt": "YAML string keys: Composition, Lighting, Environment, Action, Refinements, Camera, Aesthetic, Mood, Subject",
+            "ending_image_prompt": "Short string description of change",
+            "transition_prompt": "Specific camera movement command"
+        }
+      ]
+    }
+
+    ### 🖼️ PROMPT GUIDELINES (Strict)
+    *   **starting_image_prompt**: Must be valid YAML. keys: Composition, Lighting, Environment, Action, Refinements, Camera, Aesthetic, Mood, Subject.
+    *   **transition_prompt**: MUST describe the MOVEMENT. e.g., "Camera dollys in slowly", "Fast crash zoom to eye", "Slow orbit around the bottle". Do NOT describe the content changing, describe the CAMERA changing.
+    *   **Consistency**: Ensure the 'Subject' and 'Environment' keys remain consistent across scenes unless the script demands a change.
+    *   **Scenes**: Generate between 5 to 7 scenes based on the pacing.
+    `;
 
     const userPrompt = `The user's creative direction:
 ${creativeDirection}
