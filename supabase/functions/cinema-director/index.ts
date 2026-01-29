@@ -83,7 +83,7 @@ async function fetchImageBase64(url: string): Promise<string> {
 }
 
 async function callGemini(contents: any[], options: { json?: boolean } = {}) {
-    const model = "gemini-1.5-flash";
+    const model = "gemini-3-flash-preview";
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
 
     const body: any = {
