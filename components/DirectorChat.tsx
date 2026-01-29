@@ -60,10 +60,12 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
                     "Content-Type": "application/json",
                     "Authorization": `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
                 },
-                action: "chat",
-                prompt: input,
-                image_url: uploadedImage || undefined,
-                history: [...messages, userMsg], // Send updated history including new user message
+                body: JSON.stringify({
+                    action: "chat",
+                    prompt: input,
+                    image_url: uploadedImage || undefined,
+                    history: [...messages, userMsg], // Send updated history including new user message
+                })
             })
 
             const data = await response.json()
@@ -84,7 +86,7 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
 
         } catch (error) {
             console.error("Chat error:", error)
-            setMessages(prev => [...prev, { role: 'assistant', content: "I'm having trouble connecting to the studio. Please try again." }])
+            setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${error instanceof Error ? error.message : "Unknown connection error"}` }])
         } finally {
             setIsLoading(false)
         }
