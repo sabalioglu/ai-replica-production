@@ -60,12 +60,10 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
                     "Content-Type": "application/json",
                     "Authorization": `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
                 },
-                body: JSON.stringify({
-                    action: "chat",
-                    prompt: input,
-                    messages: messages,
-                    image_urls: uploadedImage ? [uploadedImage] : []
-                })
+                action: "chat",
+                prompt: input,
+                image_url: uploadedImage || undefined,
+                history: [...messages, userMsg], // Send updated history including new user message
             })
 
             const data = await response.json()
