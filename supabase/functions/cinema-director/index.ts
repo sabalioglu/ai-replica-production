@@ -1,19 +1,14 @@
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { CAMERA_OPTIONS, LENS_OPTIONS, LIGHTING_OPTIONS, MOVIE_LOOK_OPTIONS } from "../_shared/cinema-presets.ts";
 
 // Configuration
-const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY"); // Using OpenAI as proxy for strict instruction following
+const GEMINI_API_KEY = "AIzaSyDv6l11JeYDVcN4OWIjk1gf_Z4hOWm_JJI"; // User provided key
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-/**
- * AI Director Logic - Ported from Open-Higgsfield-Popcorn
- */
 
 interface DirectorRequest {
     action: 'analyze_image' | 'plan_sequence' | 'chat';
@@ -32,8 +27,8 @@ Deno.serve(async (req) => {
     try {
         const { action, prompt, image_url, history, style = "Cinematic Realistic", num_frames = 6 } = await req.json() as DirectorRequest;
 
-        if (!OPENAI_API_KEY) {
-            throw new Error("Missing OPENAI_API_KEY");
+        if (!GEMINI_API_KEY) {
+            throw new Error("Missing GEMINI_API_KEY");
         }
 
         // -------------------------------------------------------------------------
@@ -47,7 +42,7 @@ Deno.serve(async (req) => {
         }
 
         // -------------------------------------------------------------------------
-        // ACTION 2: PLAN SEQUENCE (The "Popcorn" Logic)
+        // ACTION 2: PLAN SEQUENCE
         // -------------------------------------------------------------------------
         if (action === "plan_sequence") {
             const plan = await planSequence(prompt || "", image_url || "", style, num_frames);
@@ -60,7 +55,7 @@ Deno.serve(async (req) => {
         // ACTION 3: CHAT (Collaborative Director)
         // -------------------------------------------------------------------------
         if (action === "chat") {
-            const reply = await chatWithDirector(history || [], prompt || "");
+            const reply = await chatWithDirector(history || [], prompt || "", image_url);
             return new Response(JSON.stringify(reply), {
                 headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
@@ -78,38 +73,72 @@ Deno.serve(async (req) => {
 
 // --- HELPER FUNCTIONS ---
 
-async function analyzeImage(imageUrl: string) {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+async function fetchImageBase64(url: string): Promise<string> {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Failed to fetch image: ${res.statusText}`);
+    const blob = await res.blob();
+    const arrayBuffer = await blob.arrayBuffer();
+    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+    return base64;
+}
+
+async function callGemini(contents: any[], options: { json?: boolean } = {}) {
+    const model = "gemini-1.5-flash";
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+
+    const body: any = {
+        contents: contents,
+        generationConfig: {
+            temperature: 0.7,
+        }
+    };
+
+    if (options.json) {
+        body.generationConfig.responseMimeType = "application/json";
+    }
+
+    const response = await fetch(url, {
         method: "POST",
-        headers: {
-            "Authorization": `Bearer ${OPENAI_API_KEY}`,
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            model: "gpt-4o", // Vision capable
-            messages: [
-                {
-                    role: "user",
-                    content: [
-                        { type: "text", text: "Analyze this image for a cinematic commercial. Describe: 1. Subject 2. Key visual features (colors, lighting) 3. Suitable mood/style. Return simple JSON." },
-                        { type: "image_url", image_url: { url: imageUrl } }
-                    ]
-                }
-            ],
-            response_format: { type: "json_object" }
-        })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
     });
+
+    if (!response.ok) {
+        const err = await response.text();
+        throw new Error(`Gemini API Error: ${err}`);
+    }
+
     const result = await response.json();
-    return JSON.parse(result.choices[0].message.content);
+    if (!result.candidates || !result.candidates[0].content) {
+        throw new Error("No response from Gemini");
+    }
+
+    const text = result.candidates[0].content.parts[0].text;
+    return options.json ? JSON.parse(text) : text;
+}
+
+async function analyzeImage(imageUrl: string) {
+    const base64Image = await fetchImageBase64(imageUrl);
+    const contents = [{
+        role: "user",
+        parts: [
+            { text: "Analyze this image for a cinematic commercial. Describe: 1. Subject 2. Key visual features (colors, lighting) 3. Suitable mood/style. Return simple JSON with keys: subject, visual_features, mood." },
+            { inline_data: { mime_type: "image/jpeg", data: base64Image } }
+        ]
+    }];
+    return await callGemini(contents, { json: true });
 }
 
 async function planSequence(prompt: string, imageUrl: string, style: string, numFrames: number) {
-    // 1. Construct the "Popcorn" System Prompt
-    const systemPrompt = `You are a professional visual planner (Director AI). 
-Analyze the user's request and plan ${numFrames} frames.
+    let imagePart = null;
+    if (imageUrl) {
+        const base64 = await fetchImageBase64(imageUrl);
+        imagePart = { inline_data: { mime_type: "image/jpeg", data: base64 } };
+    }
 
+    const systemInstruction = `You are a professional visual planner (Director AI). 
+Plan ${numFrames} frames that fulfill the brief.
 STYLE: ${style}
-TASK: Plan ${numFrames} frames that fulfill the brief.
 
 CONTEXT DETECTION:
 - Narrative: wide -> close-up -> action
@@ -130,77 +159,55 @@ OUTPUT FORMAT (JSON):
   ],
   "consistency_rules": "..."
 }
-
-CRITICAL: Subject must remain consistent.
 `;
 
-    const userContent = imageUrl
-        ? [{ type: "text", text: `Prompt: ${prompt}` }, { type: "image_url", image_url: { url: imageUrl } }]
-        : [{ type: "text", text: `Prompt: ${prompt}` }];
+    const parts = [{ text: `Prompt: ${prompt}\n\n${systemInstruction}` }];
+    if (imagePart) parts.push(imagePart);
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-            "Authorization": `Bearer ${OPENAI_API_KEY}`,
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            model: "gpt-4o",
-            messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: userContent }
-            ],
-            response_format: { type: "json_object" }
-        })
-    });
-
-    const result = await response.json();
-    return JSON.parse(result.choices[0].message.content);
+    const contents = [{ role: "user", parts }];
+    return await callGemini(contents, { json: true });
 }
 
-async function chatWithDirector(history: any[], lastUserMessage: string) {
-    // Inject Preset Knowledge into System Prompt
+async function chatWithDirector(history: any[], lastUserMessage: string, imageUrl?: string) {
+    // Flatten history to Gemini format if needed, or just append recent context
+    // Gemini supports multi-turn via 'contents' array with 'user'/'model' roles.
+
+    // Inject Preset Knowledge
     const cameraList = CAMERA_OPTIONS.map(c => c.label).join(", ");
     const lensList = LENS_OPTIONS.map(l => l.label).join(", ");
 
-    const systemPrompt = `You are an expert Creative Director. Your goal is to help the user create a perfect video ad.
-You have access to these Pro Studio Tools:
-- CAMERAS: ${cameraList}
-- LENSES: ${lensList}
+    const systemPrompt = `You are an expert Creative Director.
+Tools: CAMERAS (${cameraList}), LENSES (${lensList}).
+Goal: Clarify Product, Audience, Vibe. Propose "Creative Formula".
+Keep responses short.`;
 
-PHASE 1: INTERVIEW
-Ask concise questions to clarify:
-1. Product/Subject (if not clear)
-2. Target Audience / Platform (Instagram, TV, etc.)
-3. Vibe/Mood (use Pro Presets to suggest looks)
+    // Convert history format (assuming standard [{role, content}]) to Gemini ({role: "user"|"model", parts: [{text}]})
+    const geminiHistory = history.map((msg: any) => ({
+        role: msg.role === "assistant" ? "model" : "user",
+        parts: [{ text: msg.content }]
+    }));
 
-PHASE 2: SUGGESTION
-Once you have enough info, propose a "Creative Formula" (e.g. "The Hero's Journey" or "ASMR Unboxing").
+    // Add current message
+    const currentParts: any[] = [{ text: `System: ${systemPrompt}\nUser: ${lastUserMessage}` }];
 
-Keep responses short and conversational. Do NOT generate the full shotlist yet, just agree on direction.`;
+    if (imageUrl) {
+        try {
+            const base64 = await fetchImageBase64(imageUrl);
+            currentParts.push({ inline_data: { mime_type: "image/jpeg", data: base64 } });
+        } catch (e) {
+            console.error("Failed to load image for chat", e);
+            // Continue without image
+        }
+    }
 
-    const messages = [
-        { role: "system", content: systemPrompt },
-        ...history,
-        { role: "user", content: lastUserMessage }
+    const contents = [
+        ...geminiHistory,
+        { role: "user", parts: currentParts }
     ];
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-            "Authorization": `Bearer ${OPENAI_API_KEY}`,
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            model: "gpt-4o",
-            messages: messages
-        })
-    });
-
-    const result = await response.json();
+    const text = await callGemini(contents, { json: false });
     return {
         role: "assistant",
-        content: result.choices[0].message.content,
-        // Calculate completeness score or separate "is_ready" flag logic could go here
+        content: text
     };
 }
