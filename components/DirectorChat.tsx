@@ -2,7 +2,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { useChat } from "ai/react"
+
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -63,8 +63,8 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
                 body: JSON.stringify({
                     action: "chat",
                     prompt: input,
-                    image_url: uploadedImage, // Send image if present
-                    history: messages
+                    messages: messages,
+                    image_urls: uploadedImage ? [uploadedImage] : []
                 })
             })
 
@@ -121,7 +121,7 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
                         <h3 className="font-semibold text-lg flex items-center gap-2">
                             Creative Director <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full">BETA</span>
                         </h3>
-                        <p className="text-xs text-zinc-400">Powered by Higgsfield Intelligence</p>
+
                     </div>
                 </div>
 
