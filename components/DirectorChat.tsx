@@ -8,7 +8,44 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Card } from "@/components/ui/card"
-import { Paperclip, Send, Clapperboard, CheckCircle2 } from "lucide-react"
+import { Paperclip, Send, Clapperboard, CheckCircle2, Camera, Aperture, Sun, Palette } from "lucide-react"
+
+// --- Visual Card Component ---
+const CinemaSpecCard = ({ specs }: { specs: any }) => {
+    if (!specs) return null;
+    return (
+        <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="bg-zinc-900/50 p-2 rounded-lg border border-zinc-700/50 flex items-center gap-2">
+                <Camera className="w-4 h-4 text-purple-400" />
+                <div>
+                    <p className="text-[10px] text-zinc-500 uppercase font-bold">Camera</p>
+                    <p className="text-xs text-zinc-200 truncate max-w-[100px]" title={specs.camera}>{specs.camera || "N/A"}</p>
+                </div>
+            </div>
+            <div className="bg-zinc-900/50 p-2 rounded-lg border border-zinc-700/50 flex items-center gap-2">
+                <Aperture className="w-4 h-4 text-blue-400" />
+                <div>
+                    <p className="text-[10px] text-zinc-500 uppercase font-bold">Lens</p>
+                    <p className="text-xs text-zinc-200 truncate max-w-[100px]" title={specs.lens}>{specs.lens || "N/A"}</p>
+                </div>
+            </div>
+            <div className="bg-zinc-900/50 p-2 rounded-lg border border-zinc-700/50 flex items-center gap-2">
+                <Sun className="w-4 h-4 text-amber-400" />
+                <div>
+                    <p className="text-[10px] text-zinc-500 uppercase font-bold">Lighting</p>
+                    <p className="text-xs text-zinc-200 truncate max-w-[100px]" title={specs.lighting}>{specs.lighting || "N/A"}</p>
+                </div>
+            </div>
+            <div className="bg-zinc-900/50 p-2 rounded-lg border border-zinc-700/50 flex items-center gap-2">
+                <Palette className="w-4 h-4 text-pink-400" />
+                <div>
+                    <p className="text-[10px] text-zinc-500 uppercase font-bold">Mood</p>
+                    <p className="text-xs text-zinc-200 truncate max-w-[100px]" title={specs.mood}>{specs.mood || "N/A"}</p>
+                </div>
+            </div>
+        </div>
+    )
+}
 
 interface DirectorChatProps {
     onFinalize: (data: any) => void
@@ -24,7 +61,7 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
     // For this implementation, we will build a custom chat handler to talk 
     // directly to our 'cinema-director' Edge Function.
 
-    const [messages, setMessages] = useState<Array<{ role: string, content: string }>>([
+    const [messages, setMessages] = useState<Array<{ role: string, content: string | any }>>([
         {
             role: 'assistant',
             content: "Hello! I'm your AI Creative Director. Let's create a stunning video ad. First, please upload a photo of your product or describe what you want to make."
@@ -155,7 +192,14 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
                                         : 'bg-zinc-800/80 border border-zinc-700 text-zinc-200 rounded-tl-none'
                                     }`}
                             >
-                                {m.content}
+                                {typeof m.content === 'string' ? (
+                                    <p>{m.content}</p>
+                                ) : (
+                                    <div>
+                                        <p>{m.content.message}</p>
+                                        <CinemaSpecCard specs={m.content.specs} />
+                                    </div>
+                                )}
 
                                 {/* Show image preview if this message had an attachment (simulated logic) */}
                                 {/* In real app, we'd store attachments in message object */}
