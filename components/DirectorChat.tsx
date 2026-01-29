@@ -8,41 +8,77 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Card } from "@/components/ui/card"
-import { Paperclip, Send, Clapperboard, CheckCircle2, Camera, Aperture, Sun, Palette } from "lucide-react"
+import { Paperclip, Send, Clapperboard, CheckCircle2, Camera, Aperture, Sun, Palette, Play, Loader2, Sparkles, Film } from "lucide-react"
 
 // --- Visual Card Component ---
-const CinemaSpecCard = ({ specs }: { specs: any }) => {
+const CinemaSpecCard = ({ specs, onGenerate }: { specs: any, onGenerate: () => void }) => {
     if (!specs) return null;
     return (
-        <div className="mt-3 grid grid-cols-2 gap-2">
-            <div className="bg-zinc-900/50 p-2 rounded-lg border border-zinc-700/50 flex items-center gap-2">
-                <Camera className="w-4 h-4 text-purple-400" />
-                <div>
-                    <p className="text-[10px] text-zinc-500 uppercase font-bold">Camera</p>
-                    <p className="text-xs text-zinc-200 truncate max-w-[100px]" title={specs.camera}>{specs.camera || "N/A"}</p>
+        <div className="mt-3">
+            <div className="grid grid-cols-2 gap-2">
+                <div className="bg-zinc-900/50 p-2 rounded-lg border border-zinc-700/50 flex items-center gap-2">
+                    <Camera className="w-4 h-4 text-purple-400" />
+                    <div>
+                        <p className="text-[10px] text-zinc-500 uppercase font-bold">Camera</p>
+                        <p className="text-xs text-zinc-200 truncate max-w-[100px]" title={specs.camera}>{specs.camera || "N/A"}</p>
+                    </div>
+                </div>
+                <div className="bg-zinc-900/50 p-2 rounded-lg border border-zinc-700/50 flex items-center gap-2">
+                    <Aperture className="w-4 h-4 text-blue-400" />
+                    <div>
+                        <p className="text-[10px] text-zinc-500 uppercase font-bold">Lens</p>
+                        <p className="text-xs text-zinc-200 truncate max-w-[100px]" title={specs.lens}>{specs.lens || "N/A"}</p>
+                    </div>
+                </div>
+                <div className="bg-zinc-900/50 p-2 rounded-lg border border-zinc-700/50 flex items-center gap-2">
+                    <Sun className="w-4 h-4 text-amber-400" />
+                    <div>
+                        <p className="text-[10px] text-zinc-500 uppercase font-bold">Lighting</p>
+                        <p className="text-xs text-zinc-200 truncate max-w-[100px]" title={specs.lighting}>{specs.lighting || "N/A"}</p>
+                    </div>
+                </div>
+                <div className="bg-zinc-900/50 p-2 rounded-lg border border-zinc-700/50 flex items-center gap-2">
+                    <Palette className="w-4 h-4 text-pink-400" />
+                    <div>
+                        <p className="text-[10px] text-zinc-500 uppercase font-bold">Mood</p>
+                        <p className="text-xs text-zinc-200 truncate max-w-[100px]" title={specs.mood}>{specs.mood || "N/A"}</p>
+                    </div>
                 </div>
             </div>
-            <div className="bg-zinc-900/50 p-2 rounded-lg border border-zinc-700/50 flex items-center gap-2">
-                <Aperture className="w-4 h-4 text-blue-400" />
-                <div>
-                    <p className="text-[10px] text-zinc-500 uppercase font-bold">Lens</p>
-                    <p className="text-xs text-zinc-200 truncate max-w-[100px]" title={specs.lens}>{specs.lens || "N/A"}</p>
-                </div>
-            </div>
-            <div className="bg-zinc-900/50 p-2 rounded-lg border border-zinc-700/50 flex items-center gap-2">
-                <Sun className="w-4 h-4 text-amber-400" />
-                <div>
-                    <p className="text-[10px] text-zinc-500 uppercase font-bold">Lighting</p>
-                    <p className="text-xs text-zinc-200 truncate max-w-[100px]" title={specs.lighting}>{specs.lighting || "N/A"}</p>
-                </div>
-            </div>
-            <div className="bg-zinc-900/50 p-2 rounded-lg border border-zinc-700/50 flex items-center gap-2">
-                <Palette className="w-4 h-4 text-pink-400" />
-                <div>
-                    <p className="text-[10px] text-zinc-500 uppercase font-bold">Mood</p>
-                    <p className="text-xs text-zinc-200 truncate max-w-[100px]" title={specs.mood}>{specs.mood || "N/A"}</p>
-                </div>
-            </div>
+            <button
+                onClick={onGenerate}
+                className="mt-2 w-full flex items-center justify-center gap-2 bg-purple-600/20 hover:bg-purple-600/30 text-purple-200 text-xs py-2 rounded-lg border border-purple-500/30 transition-colors"
+            >
+                <Sparkles className="w-3 h-3" />
+                Generate Visual Preview
+            </button>
+        </div>
+    )
+}
+
+// --- Media Preview Component ---
+const MediaPreview = ({ src, type, onAnimate, isAnimating }: { src: string, type: 'image' | 'video', onAnimate?: () => void, isAnimating?: boolean }) => {
+    return (
+        <div className="mt-3 rounded-xl overflow-hidden border border-zinc-700/50 relative group">
+            {type === 'image' ? (
+                <>
+                    <img src={src} alt="Preview" className="w-full h-auto" />
+                    {onAnimate && (
+                        <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                                onClick={onAnimate}
+                                disabled={isAnimating}
+                                className="bg-black/80 hover:bg-black text-white text-xs px-3 py-1.5 rounded-full flex items-center gap-2 border border-white/20 backdrop-blur-sm transition-all"
+                            >
+                                {isAnimating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Film className="w-3 h-3" />}
+                                {isAnimating ? "Animating..." : "Animate (4s)"}
+                            </button>
+                        </div>
+                    )}
+                </>
+            ) : (
+                <video src={src} controls autoPlay loop className="w-full h-auto" />
+            )}
         </div>
     )
 }
@@ -61,7 +97,7 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
     // For this implementation, we will build a custom chat handler to talk 
     // directly to our 'cinema-director' Edge Function.
 
-    const [messages, setMessages] = useState<Array<{ role: string, content: string | any }>>([
+    const [messages, setMessages] = useState<Array<{ role: string, content: string | any, id?: string }>>([
         {
             role: 'assistant',
             content: "Hello! I'm your AI Creative Director. Let's create a stunning video ad. First, please upload a photo of your product or describe what you want to make."
@@ -129,6 +165,112 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
         }
     }
 
+    const handleGeneratePreview = async (specs: any, contextPrompt: string) => {
+        setIsLoading(true);
+        // Add a temporary loading message
+        const loadingId = Date.now().toString();
+        setMessages(prev => [...prev, { role: 'assistant', content: "Generating preview setup...", id: loadingId }]);
+
+        try {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/cinema-director`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
+                },
+                body: JSON.stringify({
+                    action: "generate_preview",
+                    prompt: contextPrompt,
+                    specs: specs
+                })
+            });
+
+            if (!response.ok) throw new Error("Preview generation failed");
+            const data = await response.json();
+
+            // Replace loading message with image
+            setMessages(prev => prev.map(m =>
+                m.id === loadingId
+                    ? { role: 'assistant', content: { image_url: data.image_url, type: 'image_preview' } }
+                    : m
+            ));
+
+        } catch (error) {
+            console.error(error);
+            setMessages(prev => prev.filter(m => m.id !== loadingId)); // Remove loader
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleAnimatePreview = async (imageUrl: string) => {
+        // Mark as animating to show loader on the specific image (simplified for now as global loading, ideally per message)
+        setIsLoading(true);
+        const loadingId = Date.now().toString();
+        setMessages(prev => [...prev, { role: 'assistant', content: "Rendering video animation (this takes ~60s)...", id: loadingId }]);
+
+        try {
+            // 1. Start Animation
+            const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/cinema-director`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
+                },
+                body: JSON.stringify({
+                    action: "animate_preview",
+                    image_url: imageUrl
+                })
+            });
+
+            if (!response.ok) throw new Error("Animation start failed");
+            const data = await response.json();
+            const taskId = data.task_id;
+
+            // 2. Poll for status
+            const pollInterval = setInterval(async () => {
+                try {
+                    const statusRes = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/cinema-director`, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
+                        },
+                        body: JSON.stringify({
+                            action: "check_status",
+                            task_id: taskId
+                        })
+                    });
+                    const statusData = await statusRes.json();
+
+                    if (statusData.status === 'done') {
+                        clearInterval(pollInterval);
+                        setIsLoading(false);
+                        // Replace loader with video
+                        setMessages(prev => prev.map(m =>
+                            m.id === loadingId
+                                ? { role: 'assistant', content: { video_url: statusData.video_url, type: 'video_preview' } }
+                                : m
+                        ));
+                    } else if (statusData.status === 'error') {
+                        clearInterval(pollInterval);
+                        setIsLoading(false);
+                        throw new Error(statusData.error);
+                    }
+                } catch (e) {
+                    console.error("Polling error", e);
+                    clearInterval(pollInterval);
+                    setIsLoading(false);
+                }
+            }, 5000); // Check every 5s
+
+        } catch (error) {
+            console.error(error);
+            setMessages(prev => prev.filter(m => m.id !== loadingId));
+            setIsLoading(false);
+        }
+    };
+
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
         if (file) {
@@ -194,10 +336,22 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
                             >
                                 {typeof m.content === 'string' ? (
                                     <p>{m.content}</p>
+                                ) : m.content.type === 'image_preview' ? (
+                                    <MediaPreview
+                                        src={m.content.image_url}
+                                        type="image"
+                                        onAnimate={() => handleAnimatePreview(m.content.image_url)}
+                                        isAnimating={isLoading} // Simplified loading state
+                                    />
+                                ) : m.content.type === 'video_preview' ? (
+                                    <MediaPreview src={m.content.video_url} type="video" />
                                 ) : (
                                     <div>
                                         <p>{m.content.message}</p>
-                                        <CinemaSpecCard specs={m.content.specs} />
+                                        <CinemaSpecCard
+                                            specs={m.content.specs}
+                                            onGenerate={() => handleGeneratePreview(m.content.specs, m.content.message)}
+                                        />
                                     </div>
                                 )}
 

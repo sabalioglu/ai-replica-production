@@ -11,10 +11,12 @@ const corsHeaders = {
 };
 
 interface DirectorRequest {
-    action: 'analyze_image' | 'plan_sequence' | 'chat';
+    action: 'analyze_image' | 'plan_sequence' | 'chat' | 'generate_preview' | 'animate_preview' | 'check_status';
     prompt?: string;
     image_url?: string;
     history?: any[]; // For chat context
+    specs?: any; // For image generation
+    task_id?: string; // For polling
     style?: string;
     num_frames?: number;
 }
@@ -25,7 +27,8 @@ Deno.serve(async (req) => {
     }
 
     try {
-        const { action, prompt, image_url, history, style = "Cinematic Realistic", num_frames = 6 } = await req.json() as DirectorRequest;
+        const reqBody = await req.json() as DirectorRequest;
+        const { action, prompt, image_url, history, style = "Cinematic Realistic", num_frames = 6 } = reqBody;
 
         if (!GEMINI_API_KEY) {
             throw new Error("Missing GEMINI_API_KEY");
@@ -57,6 +60,46 @@ Deno.serve(async (req) => {
         if (action === "chat") {
             const reply = await chatWithDirector(history || [], prompt || "", image_url);
             return new Response(JSON.stringify(reply), {
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+        }
+
+        // -------------------------------------------------------------------------
+        // ACTION 4: GENERATE PREVIEW (Image)
+        // -------------------------------------------------------------------------
+        if (action === "generate_preview") {
+            // 1. Refine prompt for Nano Banana Pro
+            const refinedPrompt = await refineImagePrompt(prompt || "", reqBody.specs);
+            // 2. Generate Image
+            const imageUrl = await generateImage(refinedPrompt);
+
+            return new Response(JSON.stringify({ image_url: imageUrl, refined_prompt: refinedPrompt }), {
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+        }
+
+        // -------------------------------------------------------------------------
+        // ACTION 5: ANIMATE PREVIEW (Video)
+        // -------------------------------------------------------------------------
+        if (action === "animate_preview") {
+            if (!image_url) throw new Error("Image URL required for animation");
+
+            // Start Video Gen (Returns Task ID)
+            const taskId = await startVideoGeneration(image_url, prompt || "Cinematic slow motion");
+
+            return new Response(JSON.stringify({ task_id: taskId, status: "processing" }), {
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+        }
+
+        // -------------------------------------------------------------------------
+        // ACTION 6: CHECK STATUS (Polling)
+        // -------------------------------------------------------------------------
+        if (action === "check_status") {
+            if (!reqBody.task_id) throw new Error("Task ID required");
+
+            const status = await checkVideoStatus(reqBody.task_id);
+            return new Response(JSON.stringify(status), {
                 headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
         }
@@ -168,6 +211,124 @@ OUTPUT FORMAT (JSON):
     return await callGemini(contents, { json: true });
 }
 
+// --- NEW STUDIO FUNCTIONS ---
+
+async function refineImagePrompt(userPrompt: string, specs: any) {
+    const specText = specs ? `
+    Camera: ${specs.camera || "Cinematic"}
+    Lens: ${specs.lens || "Standard"}
+    Lighting: ${specs.lighting || "Natural"}
+    Mood: ${specs.mood || "Balanced"}
+    ` : "";
+
+    const contents = [{
+        role: "user",
+        parts: [{
+            text: `Act as a Prompt Engineer for a high-end AI Image Generator (Nano Banana Pro).
+        Reword this user concept into a detailed visual prompt.
+        
+        User Concept: "${userPrompt}"
+        Technical Specs: ${specText}
+        
+        Guidelines:
+        - Focus on Subject, Actions, Context, Lighting, and Art Style.
+        - Be descriptive but concise.
+        - Output ONLY the raw prompt string, no JSON.` }]
+    }];
+
+    return await callGemini(contents, { json: false });
+}
+
+async function generateImage(prompt: string) {
+    // Using WaveSpeed API (Nano Banana Pro)
+    // We'll use Deno.env.get("RAPIDAPI_KEY"). If not set, we might need a fallback.
+    // Assuming RAPIDAPI_KEY is available in Supabase secrets from previous user context.
+    const apiKey = Deno.env.get("RAPIDAPI_KEY");
+    if (!apiKey) throw new Error("RAPIDAPI_KEY not configured");
+
+    const response = await fetch('https://api.wavespeed.ai/api/v3/google/nano-banana-pro/edit', {
+        method: 'POST',
+        headers: {
+            'x-rapidapi-key': apiKey,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            aspect_ratio: '16:9',
+            enable_base64_output: false,
+            enable_sync_mode: true,
+            output_format: 'png',
+            prompt: prompt,
+            resolution: '2k' // High quality for studio
+        })
+    });
+
+    if (!response.ok) {
+        const txt = await response.text();
+        throw new Error(`Image Gen Failed: ${txt}`);
+    }
+
+    const data = await response.json();
+    return data.data.outputs[0];
+}
+
+async function startVideoGeneration(imageUrl: string, prompt: string) {
+    const apiKey = Deno.env.get("RAPIDAPI_KEY");
+    if (!apiKey) throw new Error("RAPIDAPI_KEY not configured");
+
+    const response = await fetch('https://api.kie.ai/api/v1/veo/generate', {
+        method: 'POST',
+        headers: {
+            'x-rapidapi-key': apiKey,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            prompt: prompt,
+            model: 'veo3_fast',
+            aspectRatio: '16:9',
+            enableTranslation: false,
+            generationType: 'IMAGE_2_VIDEO', // Standard Image to Video
+            imageUrls: [imageUrl]
+        })
+    });
+
+    if (!response.ok) {
+        const txt = await response.text();
+        console.error("Video Start Error:", txt);
+        throw new Error(`Video Gen Failed: ${txt}`);
+    }
+
+    const data = await response.json();
+    return data.data.taskId;
+}
+
+async function checkVideoStatus(taskId: string) {
+    const apiKey = Deno.env.get("RAPIDAPI_KEY");
+    if (!apiKey) throw new Error("RAPIDAPI_KEY not configured");
+
+    const response = await fetch(
+        `https://api.kie.ai/api/v1/veo/record-info?taskId=${taskId}`,
+        {
+            headers: {
+                'x-rapidapi-key': apiKey
+            }
+        }
+    );
+
+    if (!response.ok) throw new Error(`Status Check Failed: ${response.statusText}`);
+
+    const data = await response.json();
+
+    // successFlag: 1 = done, 0 = processing, -1 = error
+    if (data.data.successFlag === 1) {
+        return { status: 'done', video_url: data.data.response.resultUrls[0] };
+    } else if (data.data.successFlag === -1) {
+        return { status: 'error', error: "Video generation failed provider-side" };
+    } else {
+        return { status: 'processing' };
+    }
+}
+
+
 async function chatWithDirector(history: any[], lastUserMessage: string, imageUrl?: string) {
     // Flatten history to Gemini format if needed, or just append recent context
     // Gemini supports multi-turn via 'contents' array with 'user'/'model' roles.
@@ -175,17 +336,46 @@ async function chatWithDirector(history: any[], lastUserMessage: string, imageUr
     // Inject Preset Knowledge
     const cameraList = CAMERA_OPTIONS.map(c => c.label).join(", ");
     const lensList = LENS_OPTIONS.map(l => l.label).join(", ");
+    const lightingList = LIGHTING_OPTIONS.map(l => l.label).join(", ");
 
     const systemPrompt = `You are an expert Creative Director.
-Tools: CAMERAS (${cameraList}), LENSES (${lensList}).
-Goal: Clarify Product, Audience, Vibe. Propose "Creative Formula".
-Keep responses short.`;
+Tools: CAMERAS (${cameraList}), LENSES (${lensList}), LIGHTING (${lightingList}).
+
+GOAL: Clarify Product, Audience, Vibe.
+OUTPUT FORMAT: JSON ONLY.
+{
+  "message": "Short, friendly, non-technical explanation of your creative vision.",
+  "specs": {
+    "camera": "Best camera choice",
+    "lens": "Best lens choice",
+    "lighting": "Best lighting choice",
+    "mood": "2-3 word mood description"
+  }
+}
+If you don't have enough info yet, suggest defaults in specs but ask clarifying questions in the message.`;
 
     // Convert history format (assuming standard [{role, content}]) to Gemini ({role: "user"|"model", parts: [{text}]})
-    const geminiHistory = history.map((msg: any) => ({
-        role: msg.role === "assistant" ? "model" : "user",
-        parts: [{ text: msg.content }]
-    }));
+    const geminiHistory = history.map((msg: any) => {
+        let textContent = "";
+        // If previous content was JSON (from our new format), extract the message part for history
+        try {
+            if (typeof msg.content === 'object' && msg.content.message) {
+                textContent = msg.content.message;
+            } else if (typeof msg.content === 'string' && msg.content.trim().startsWith('{')) {
+                const parsed = JSON.parse(msg.content);
+                textContent = parsed.message || msg.content;
+            } else {
+                textContent = msg.content;
+            }
+        } catch (e) {
+            textContent = msg.content;
+        }
+
+        return {
+            role: msg.role === "assistant" ? "model" : "user",
+            parts: [{ text: textContent }]
+        };
+    });
 
     // Add current message
     const currentParts: any[] = [{ text: `System: ${systemPrompt}\nUser: ${lastUserMessage}` }];
@@ -205,9 +395,10 @@ Keep responses short.`;
         { role: "user", parts: currentParts }
     ];
 
-    const text = await callGemini(contents, { json: false });
+    // Force JSON response
+    const result = await callGemini(contents, { json: true });
     return {
         role: "assistant",
-        content: text
+        content: result // result is now the JSON object { message, specs }
     };
 }
