@@ -8,76 +8,38 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Card } from "@/components/ui/card"
-import { Paperclip, Send, Clapperboard, CheckCircle2, Camera, Aperture, Sun, Palette, Play, Loader2, Sparkles, Film } from "lucide-react"
-
-// --- Visual Card Component ---
-const CinemaSpecCard = ({ specs, onGenerate }: { specs: any, onGenerate: () => void }) => {
-    if (!specs) return null;
-    return (
-        <div className="mt-3">
-            <div className="grid grid-cols-2 gap-2">
-                <div className="bg-zinc-900/50 p-2 rounded-lg border border-zinc-700/50 flex items-center gap-2">
-                    <Camera className="w-4 h-4 text-purple-400" />
-                    <div>
-                        <p className="text-[10px] text-zinc-500 uppercase font-bold">Camera</p>
-                        <p className="text-xs text-zinc-200 truncate max-w-[100px]" title={specs.camera}>{specs.camera || "N/A"}</p>
-                    </div>
-                </div>
-                <div className="bg-zinc-900/50 p-2 rounded-lg border border-zinc-700/50 flex items-center gap-2">
-                    <Aperture className="w-4 h-4 text-blue-400" />
-                    <div>
-                        <p className="text-[10px] text-zinc-500 uppercase font-bold">Lens</p>
-                        <p className="text-xs text-zinc-200 truncate max-w-[100px]" title={specs.lens}>{specs.lens || "N/A"}</p>
-                    </div>
-                </div>
-                <div className="bg-zinc-900/50 p-2 rounded-lg border border-zinc-700/50 flex items-center gap-2">
-                    <Sun className="w-4 h-4 text-amber-400" />
-                    <div>
-                        <p className="text-[10px] text-zinc-500 uppercase font-bold">Lighting</p>
-                        <p className="text-xs text-zinc-200 truncate max-w-[100px]" title={specs.lighting}>{specs.lighting || "N/A"}</p>
-                    </div>
-                </div>
-                <div className="bg-zinc-900/50 p-2 rounded-lg border border-zinc-700/50 flex items-center gap-2">
-                    <Palette className="w-4 h-4 text-pink-400" />
-                    <div>
-                        <p className="text-[10px] text-zinc-500 uppercase font-bold">Mood</p>
-                        <p className="text-xs text-zinc-200 truncate max-w-[100px]" title={specs.mood}>{specs.mood || "N/A"}</p>
-                    </div>
-                </div>
-            </div>
-            <button
-                onClick={onGenerate}
-                className="mt-2 w-full flex items-center justify-center gap-2 bg-purple-600/20 hover:bg-purple-600/30 text-purple-200 text-xs py-2 rounded-lg border border-purple-500/30 transition-colors"
-            >
-                <Sparkles className="w-3 h-3" />
-                Generate Visual Preview
-            </button>
-        </div>
-    )
-}
+import { Paperclip, Send, Loader2, Sparkles, Film, Settings2, Download, RefreshCw, X } from "lucide-react"
+import { CinemaControls } from "@/components/CinemaControls" // New import
 
 // --- Media Preview Component ---
 const MediaPreview = ({ src, type, onAnimate, isAnimating }: { src: string, type: 'image' | 'video', onAnimate?: () => void, isAnimating?: boolean }) => {
     return (
-        <div className="mt-3 rounded-xl overflow-hidden border border-zinc-700/50 relative group">
+        <div className="mt-3 rounded-xl overflow-hidden border border-gray-200 shadow-sm relative group bg-gray-50">
             {type === 'image' ? (
                 <>
-                    <img src={src} alt="Preview" className="w-full h-auto" />
+                    <img src={src} alt="Preview" className="w-full h-auto object-cover" />
                     {onAnimate && (
                         <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
                                 onClick={onAnimate}
                                 disabled={isAnimating}
-                                className="bg-black/80 hover:bg-black text-white text-xs px-3 py-1.5 rounded-full flex items-center gap-2 border border-white/20 backdrop-blur-sm transition-all"
+                                className="bg-white/90 hover:bg-white text-gray-900 text-xs px-3 py-1.5 rounded-full flex items-center gap-2 border border-gray-200 shadow-md transition-all font-medium"
                             >
-                                {isAnimating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Film className="w-3 h-3" />}
-                                {isAnimating ? "Animating..." : "Animate (4s)"}
+                                {isAnimating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Film className="w-3 h-3 text-purple-600" />}
+                                {isAnimating ? "Animating..." : "Animate"}
                             </button>
                         </div>
                     )}
                 </>
             ) : (
-                <video src={src} controls autoPlay loop className="w-full h-auto" />
+                <div className="relative">
+                    <video src={src} controls autoPlay loop className="w-full h-auto" />
+                    <div className="absolute top-2 right-2">
+                        <a href={src} download className="p-1.5 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors">
+                            <Download className="w-4 h-4" />
+                        </a>
+                    </div>
+                </div>
             )}
         </div>
     )
@@ -88,26 +50,26 @@ interface DirectorChatProps {
 }
 
 export function DirectorChat({ onFinalize }: DirectorChatProps) {
-    const [isReadyParams, setIsReadyParams] = useState<any>(null)
-
-    // Using verify-less generic chat for now to talk to our edge function proxy
-    // In a real Vercel AI SDK setup, we'd point to /api/chat. 
-    // Here we simulate the chat hook or use a simple custom implementation 
-    // if Vercel SDK isn't fully routed to Supabase Edge Functions yet.
-    // For this implementation, we will build a custom chat handler to talk 
-    // directly to our 'cinema-director' Edge Function.
-
+    // Chat State
     const [messages, setMessages] = useState<Array<{ role: string, content: string | any, id?: string }>>([
         {
             role: 'assistant',
-            content: "Hello! I'm your AI Creative Director. Let's create a stunning video ad. First, please upload a photo of your product or describe what you want to make."
+            content: "Hello! I'm your AI Creative Director. Describe your product and vision, or upload an image to start."
         }
     ])
     const [input, setInput] = useState("")
     const [isLoading, setIsLoading] = useState(false)
     const [uploadedImage, setUploadedImage] = useState<string | null>(null)
-
     const messagesEndRef = useRef<HTMLDivElement>(null)
+
+    // Studio State (Manual Controls)
+    const [manualSpecs, setManualSpecs] = useState<any>({
+        camera: "",
+        lens: "",
+        lighting: "",
+        mood: ""
+    })
+    const [showControls, setShowControls] = useState(true) // Always visible on desktop ideally
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -126,7 +88,6 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
         setIsLoading(true)
 
         try {
-            // Call the AI Director Edge Function
             const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/cinema-director`, {
                 method: "POST",
                 headers: {
@@ -137,39 +98,40 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
                     action: "chat",
                     prompt: input,
                     image_url: uploadedImage || undefined,
-                    history: [...messages, userMsg], // Send updated history including new user message
+                    history: messages.map(m => ({ role: m.role, content: m.content })),
                 })
             })
 
             const data = await response.json()
+            if (data.error) throw new Error(data.error)
 
-            if (data.error) {
-                throw new Error(data.error)
+            // If AI suggests specs, update our manual controls state
+            if (typeof data.content === 'object' && data.content.specs) {
+                setManualSpecs((prev: any) => ({
+                    ...prev,
+                    ...data.content.specs
+                }))
             }
 
             setMessages(prev => [...prev, { role: 'assistant', content: data.content }])
-
-            // Clear image after sending to not re-send it contextually every time unless needed?
-            // For now, let's keep it in state or clear it. Let's clear it to indicate "sent".
             if (uploadedImage) setUploadedImage(null)
-
-            // Check if Director signaled "Ready" (this would come from structured output in a real app)
-            // For now, we simulate a "Finalize" button appearing after 3-4 turns or based on keywords.
-            // In production, the Edge Function should return a structured `is_ready: true` flag.
 
         } catch (error) {
             console.error("Chat error:", error)
-            setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${error instanceof Error ? error.message : "Unknown connection error"}` }])
+            setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${error instanceof Error ? error.message : "Connection error"}` }])
         } finally {
             setIsLoading(false)
         }
     }
 
-    const handleGeneratePreview = async (specs: any, contextPrompt: string) => {
+    const handleGeneratePreview = async () => {
         setIsLoading(true);
-        // Add a temporary loading message
         const loadingId = Date.now().toString();
-        setMessages(prev => [...prev, { role: 'assistant', content: "Generating preview setup...", id: loadingId }]);
+
+        // Find the last relevant context prompt
+        const lastUserMessage = [...messages].reverse().find(m => m.role === 'user')?.content || "Cinematic product shot";
+
+        setMessages(prev => [...prev, { role: 'assistant', content: "Generating preview with current settings...", id: loadingId }]);
 
         try {
             const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/cinema-director`, {
@@ -180,15 +142,14 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
                 },
                 body: JSON.stringify({
                     action: "generate_preview",
-                    prompt: contextPrompt,
-                    specs: specs
+                    prompt: lastUserMessage, // Use chat context + specs
+                    specs: manualSpecs // Use MANUAL specs
                 })
             });
 
             if (!response.ok) throw new Error("Preview generation failed");
             const data = await response.json();
 
-            // Replace loading message with image
             setMessages(prev => prev.map(m =>
                 m.id === loadingId
                     ? { role: 'assistant', content: { image_url: data.image_url, type: 'image_preview' } }
@@ -197,20 +158,18 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
 
         } catch (error) {
             console.error(error);
-            setMessages(prev => prev.filter(m => m.id !== loadingId)); // Remove loader
+            setMessages(prev => prev.filter(m => m.id !== loadingId));
         } finally {
             setIsLoading(false);
         }
     };
 
     const handleAnimatePreview = async (imageUrl: string) => {
-        // Mark as animating to show loader on the specific image (simplified for now as global loading, ideally per message)
         setIsLoading(true);
         const loadingId = Date.now().toString();
-        setMessages(prev => [...prev, { role: 'assistant', content: "Rendering video animation (this takes ~60s)...", id: loadingId }]);
+        setMessages(prev => [...prev, { role: 'assistant', content: "Animating preview...", id: loadingId }]);
 
         try {
-            // 1. Start Animation
             const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/cinema-director`, {
                 method: "POST",
                 headers: {
@@ -227,7 +186,6 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
             const data = await response.json();
             const taskId = data.task_id;
 
-            // 2. Poll for status
             const pollInterval = setInterval(async () => {
                 try {
                     const statusRes = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/cinema-director`, {
@@ -246,7 +204,6 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
                     if (statusData.status === 'done') {
                         clearInterval(pollInterval);
                         setIsLoading(false);
-                        // Replace loader with video
                         setMessages(prev => prev.map(m =>
                             m.id === loadingId
                                 ? { role: 'assistant', content: { video_url: statusData.video_url, type: 'video_preview' } }
@@ -262,7 +219,7 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
                     clearInterval(pollInterval);
                     setIsLoading(false);
                 }
-            }, 5000); // Check every 5s
+            }, 5000);
 
         } catch (error) {
             console.error(error);
@@ -274,159 +231,189 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
         if (file) {
-            // In a real app, upload to Supabase Storage and get URL.
-            // For this demo/MVP, we'll try to use a data URI or presume pre-uploaded URL.
-            // Since we can't easily upload to storage without user context here, 
-            // let's assume the user pastes a URL or we handle file reading to Data URI (limited size).
             const reader = new FileReader()
-            reader.onloadend = () => {
-                setUploadedImage(reader.result as string)
-            }
+            reader.onloadend = () => setUploadedImage(reader.result as string)
             reader.readAsDataURL(file)
         }
     }
 
     return (
-        <Card className="flex flex-col h-[700px] w-full max-w-4xl mx-auto shadow-2xl border-0 overflow-hidden bg-zinc-950 text-zinc-100">
+        <div className="flex justify-center w-full min-h-[800px] p-4 bg-gray-50/50">
+            <Card className="flex w-full max-w-6xl h-[800px] shadow-2xl border border-gray-200 overflow-hidden bg-white ring-1 ring-gray-200/50">
 
-            {/* Header */}
-            <div className="p-4 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center backdrop-blur">
-                <div className="flex items-center gap-3">
-                    <Avatar className="h-10 w-10 border border-purple-500/30">
-                        <AvatarImage src="/director-avatar.png" />
-                        <AvatarFallback className="bg-purple-900 text-purple-200">AI</AvatarFallback>
-                    </Avatar>
-                    <div>
-                        <h3 className="font-semibold text-lg flex items-center gap-2">
-                            Creative Director <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full">BETA</span>
-                        </h3>
+                {/* LEFT: Chat & Preview Area */}
+                <div className="flex-1 flex flex-col border-r border-gray-100 relative">
+                    {/* Header */}
+                    <div className="p-4 border-b border-gray-100 bg-white/80 backdrop-blur flex justify-between items-center z-10 sticky top-0">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-purple-100 p-2 rounded-lg">
+                                <Sparkles className="w-5 h-5 text-purple-600" />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-gray-900 leading-tight">AI Director</h3>
+                                <p className="text-xs text-gray-500">Interactive Studio</p>
+                            </div>
+                        </div>
+                        {/* Mobile Toggle for Controls */}
+                        <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setShowControls(!showControls)}>
+                            <Settings2 className="w-5 h-5 text-gray-500" />
+                        </Button>
+                    </div>
 
+                    {/* Messages */}
+                    <ScrollArea className="flex-1 p-6 bg-gray-50/30">
+                        <div className="space-y-6 max-w-2xl mx-auto pb-10">
+                            {messages.map((m, i) => (
+                                <div key={i} className={`flex gap-4 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                    {m.role === 'assistant' && (
+                                        <Avatar className="h-8 w-8 mt-1 ring-2 ring-white shadow-sm">
+                                            <AvatarImage src="/director-avatar.png" />
+                                            <AvatarFallback className="bg-gradient-to-br from-purple-500 to-indigo-600 text-white font-bold text-xs">AI</AvatarFallback>
+                                        </Avatar>
+                                    )}
+
+                                    <div className={`
+                                        relative p-4 rounded-2xl max-w-[85%] text-sm leading-relaxed shadow-sm transition-all
+                                        ${m.role === 'user'
+                                            ? 'bg-gray-900 text-white rounded-tr-sm'
+                                            : 'bg-white border border-gray-100 text-gray-700 rounded-tl-sm hover:shadow-md'}
+                                    `}>
+                                        {typeof m.content === 'string' ? (
+                                            <p className="whitespace-pre-wrap">{m.content}</p>
+                                        ) : m.content.type === 'image_preview' ? (
+                                            <MediaPreview
+                                                src={m.content.image_url}
+                                                type="image"
+                                                onAnimate={() => handleAnimatePreview(m.content.image_url)}
+                                                isAnimating={isLoading}
+                                            />
+                                        ) : m.content.type === 'video_preview' ? (
+                                            <MediaPreview src={m.content.video_url} type="video" />
+                                        ) : (
+                                            <div className="space-y-2">
+                                                <p className="font-medium">{m.content.message}</p>
+                                                {/* Specs are now shown in the side panel, but we can summarize here if needed */}
+                                                <div className="flex flex-wrap gap-1 mt-2">
+                                                    {Object.entries(m.content.specs || {}).map(([k, v]) => (
+                                                        <span key={k} className="text-[10px] bg-gray-100 text-gray-500 px-2 py-1 rounded-full border border-gray-200 uppercase tracking-wide">
+                                                            {String(v)}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {m.role === 'user' && (
+                                        <Avatar className="h-8 w-8 mt-1 ring-2 ring-white shadow-sm">
+                                            <AvatarFallback className="bg-gray-200 text-gray-600 font-bold text-xs">U</AvatarFallback>
+                                        </Avatar>
+                                    )}
+                                </div>
+                            ))}
+                            <div ref={messagesEndRef} />
+                        </div>
+                    </ScrollArea>
+
+                    {/* Input */}
+                    <div className="p-4 bg-white border-t border-gray-100">
+                        {uploadedImage && (
+                            <div className="mb-3 relative w-fit group">
+                                <img src={uploadedImage} alt="Upload preview" className="h-20 rounded-lg border border-gray-200 shadow-sm object-cover" />
+                                <button
+                                    onClick={() => setUploadedImage(null)}
+                                    className="absolute -top-2 -right-2 bg-white text-gray-400 hover:text-red-500 border border-gray-200 rounded-full w-6 h-6 flex items-center justify-center text-sm shadow-sm transition-colors"
+                                >
+                                    <X className="w-3 h-3" />
+                                </button>
+                            </div>
+                        )}
+                        <div className="flex gap-2 max-w-2xl mx-auto relative bg-gray-50 p-1.5 rounded-full border border-gray-200 focus-within:ring-2 focus-within:ring-purple-100 focus-within:border-purple-300 transition-all shadow-sm">
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-full"
+                                onClick={() => document.getElementById('file-upload')?.click()}
+                            >
+                                <Paperclip className="w-4 h-4" />
+                            </Button>
+                            <input
+                                id="file-upload"
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={handleFileUpload}
+                            />
+
+                            <Input
+                                value={input}
+                                onChange={(e) => setInput(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                                placeholder="Describe your vision..."
+                                className="bg-transparent border-0 focus-visible:ring-0 text-gray-800 placeholder:text-gray-400 h-10 px-2"
+                                disabled={isLoading}
+                            />
+
+                            <Button
+                                onClick={handleSendMessage}
+                                disabled={isLoading || (!input && !uploadedImage)}
+                                size="icon"
+                                className="rounded-full bg-purple-600 hover:bg-purple-700 text-white shadow-sm w-10 h-10 shrink-0"
+                            >
+                                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4 ml-0.5" />}
+                            </Button>
+                        </div>
                     </div>
                 </div>
 
-                {/* Finalize Button (Visible when 'Ready') - For testing, always visible but disabled */}
-                <Button
-                    onClick={() => onFinalize({ messages })} // Pass conversation history as context
-                    variant="outline"
-                    className="border-green-800 bg-green-900/10 text-green-400 hover:bg-green-900/20 transition-all"
-                >
-                    <CheckCircle2 className="w-4 h-4 mr-2" />
-                    Finalize Brief
-                </Button>
-            </div>
+                {/* RIGHT: Studio Panel (Controls) */}
+                {showControls && (
+                    <div className="w-[320px] bg-gray-50 border-l border-gray-100 p-6 flex flex-col gap-6 overflow-y-auto">
+                        <div>
+                            <h4 className="font-bold text-gray-900 mb-1">Studio Settings</h4>
+                            <p className="text-xs text-gray-500 mb-4">Customize the visual style manually or let AI decide.</p>
 
-            {/* Chat Area */}
-            <ScrollArea className="flex-1 p-4 bg-[url('/grid-pattern.svg')] bg-repeat opacity-90">
-                <div className="space-y-4 max-w-3xl mx-auto">
-                    {messages.map((m, i) => (
-                        <div key={i} className={`flex gap-3 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-
-                            {m.role === 'assistant' && (
-                                <Avatar className="h-8 w-8 mt-1 border border-zinc-700">
-                                    <AvatarFallback className="bg-zinc-800">D</AvatarFallback>
-                                </Avatar>
-                            )}
-
-                            <div
-                                className={`p-3 rounded-2xl max-w-[80%] text-sm leading-relaxed shadow-sm
-                  ${m.role === 'user'
-                                        ? 'bg-purple-600 text-white rounded-tr-none'
-                                        : 'bg-zinc-800/80 border border-zinc-700 text-zinc-200 rounded-tl-none'
-                                    }`}
-                            >
-                                {typeof m.content === 'string' ? (
-                                    <p>{m.content}</p>
-                                ) : m.content.type === 'image_preview' ? (
-                                    <MediaPreview
-                                        src={m.content.image_url}
-                                        type="image"
-                                        onAnimate={() => handleAnimatePreview(m.content.image_url)}
-                                        isAnimating={isLoading} // Simplified loading state
-                                    />
-                                ) : m.content.type === 'video_preview' ? (
-                                    <MediaPreview src={m.content.video_url} type="video" />
-                                ) : (
-                                    <div>
-                                        <p>{m.content.message}</p>
-                                        <CinemaSpecCard
-                                            specs={m.content.specs}
-                                            onGenerate={() => handleGeneratePreview(m.content.specs, m.content.message)}
-                                        />
-                                    </div>
-                                )}
-
-                                {/* Show image preview if this message had an attachment (simulated logic) */}
-                                {/* In real app, we'd store attachments in message object */}
-                            </div>
-
-                            {m.role === 'user' && (
-                                <Avatar className="h-8 w-8 mt-1 border border-zinc-700">
-                                    <AvatarFallback className="bg-zinc-800">U</AvatarFallback>
-                                </Avatar>
-                            )}
+                            {/* Pro Controls Component */}
+                            <CinemaControls
+                                specs={manualSpecs}
+                                onSpecChange={(key, val) => setManualSpecs((prev: any) => ({ ...prev, [key]: val }))}
+                            />
                         </div>
-                    ))}
-                    <div ref={messagesEndRef} />
-                </div>
-            </ScrollArea>
 
-            {/* Input Area */}
-            <div className="p-4 bg-zinc-900/80 border-t border-zinc-800 backdrop-blur-md">
+                        <div className="h-px bg-gray-200 w-full" />
 
-                {uploadedImage && (
-                    <div className="mb-2 relative w-fit group">
-                        <img src={uploadedImage} alt="Upload preview" className="h-20 rounded-lg border border-zinc-600" />
-                        <button
-                            onClick={() => setUploadedImage(null)}
-                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                            ×
-                        </button>
+                        {/* Quick Actions */}
+                        <div className="mt-auto space-y-3">
+                            <Button
+                                onClick={handleGeneratePreview}
+                                disabled={isLoading}
+                                className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-lg shadow-purple-200 border-0 h-11"
+                            >
+                                <Sparkles className="w-4 h-4 mr-2" />
+                                Generate New Preview
+                            </Button>
+
+                            <Button
+                                onClick={() => onFinalize({ messages, specs: manualSpecs })}
+                                variant="outline"
+                                className="w-full border-gray-300 text-gray-600 hover:bg-gray-100 hover:text-gray-900 h-10"
+                            >
+                                <CheckCircle2 className="w-4 h-4 mr-2" />
+                                Finalize & Export Brief
+                            </Button>
+                        </div>
+
+                        {/* Status/Tips */}
+                        <div className="bg-blue-50 border border-blue-100 p-3 rounded-lg text-xs text-blue-700">
+                            <strong>Pro Tip:</strong> Select a specific "Look" to override the AI's default style logic.
+                        </div>
                     </div>
                 )}
-
-                <div className="flex gap-2 max-w-3xl mx-auto relative">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
-                        onClick={() => document.getElementById('file-upload')?.click()}
-                    >
-                        <Paperclip className="w-5 h-5" />
-                    </Button>
-                    <input
-                        id="file-upload"
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={handleFileUpload}
-                    />
-
-                    <Input
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                        placeholder="Describe your product, mood, or audience..."
-                        className="bg-zinc-950/50 border-zinc-700 focus-visible:ring-purple-500/50 text-zinc-200"
-                        disabled={isLoading}
-                    />
-
-                    <Button
-                        onClick={handleSendMessage}
-                        disabled={isLoading || (!input && !uploadedImage)}
-                        className="bg-purple-600 hover:bg-purple-500 text-white shadow-lg transition-all"
-                    >
-                        {isLoading ? (
-                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white/20 border-t-white" />
-                        ) : (
-                            <Send className="w-4 h-4" />
-                        )}
-                    </Button>
-                </div>
-                <p className="text-center text-[10px] text-zinc-500 mt-2">
-                    AI Director can make mistakes. Review the final brief before generating.
-                </p>
-            </div>
-        </Card>
+            </Card>
+        </div>
     )
 }
+
+// Missing icon import catch
+import { CheckCircle2 } from "lucide-react"
+
