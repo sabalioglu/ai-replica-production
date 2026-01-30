@@ -15,7 +15,15 @@ interface StoryboardGridProps {
 }
 
 export function StoryboardGrid({ sequence, onFrameUpdate }: StoryboardGridProps) {
-    const [frames, setFrames] = useState<StoryboardFrameDetails[]>(sequence.plan.frames)
+    if (!sequence) return null;
+
+    // Safe access to frames, handling potential structure mismatch
+    // The sequence might be the plan itself (flat) or contain a plan property
+    const planData = (sequence as any).plan || sequence;
+    const initialFrames = planData?.frames || [];
+    const initialBackgrounds = planData?.backgrounds || [];
+
+    const [frames, setFrames] = useState<StoryboardFrameDetails[]>(initialFrames)
     const [generatingIds, setGeneratingIds] = useState<number[]>([])
     const [bgUrls, setBgUrls] = useState<Record<string, string>>({})
 
@@ -34,21 +42,23 @@ export function StoryboardGrid({ sequence, onFrameUpdate }: StoryboardGridProps)
         // Step 1: Generate Backgrounds (Parallel)
         const newBgUrls: Record<string, string> = { ...bgUrls }
 
-        await Promise.all(sequence.plan.backgrounds.map(async (bg) => {
-            if (newBgUrls[bg.id]) return;
-            try {
-                const { data } = await supabase.functions.invoke('cinema-popcorn', {
-                    body: {
-                        action: 'generate_background',
-                        background_plan: bg,
-                        style: "Cinematic Realistic"
-                    }
-                })
-                if (data?.url) newBgUrls[bg.id] = data.url
-            } catch (e) {
-                console.error(`Bg ${bg.id} failed`, e)
-            }
-        }))
+        if (initialBackgrounds.length > 0) {
+            await Promise.all(initialBackgrounds.map(async (bg: any) => {
+                if (newBgUrls[bg.id]) return;
+                try {
+                    const { data } = await supabase.functions.invoke('cinema-popcorn', {
+                        body: {
+                            action: 'generate_background',
+                            background_plan: bg,
+                            style: "Cinematic Realistic"
+                        }
+                    })
+                    if (data?.url) newBgUrls[bg.id] = data.url
+                } catch (e) {
+                    console.error(`Bg ${bg.id} failed`, e)
+                }
+            }))
+        } // Closing the if check
 
         setBgUrls(newBgUrls)
 
