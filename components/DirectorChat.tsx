@@ -149,14 +149,20 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
             // If AI suggests specs, update our manual controls state ONLY if not manually set?
             // User requested manual control overrides. So let's say AI suggests, but user can change it.
             // We'll update state to show what AI thinks, but user can click to change.
-            if (typeof data.content === 'object' && data.content.specs) {
-                setManualSpecs((prev: any) => ({
-                    ...prev,
-                    ...data.content.specs
-                }))
+            let messageContent = data.content;
+
+            if (typeof data.content === 'object') {
+                if (data.content.specs) {
+                    setManualSpecs((prev: any) => ({
+                        ...prev,
+                        ...data.content.specs
+                    }))
+                }
+                // Extract the text message to prevent React render error (Error #31)
+                messageContent = data.content.message || JSON.stringify(data.content);
             }
 
-            setMessages(prev => [...prev, { role: 'assistant', content: data.content, id: crypto.randomUUID() }])
+            setMessages(prev => [...prev, { role: 'assistant', content: messageContent, id: crypto.randomUUID() }])
             if (uploadedImage) setUploadedImage(null)
 
         } catch (error) {
