@@ -120,7 +120,13 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
     const handleSendMessage = async () => {
         if ((!input.trim() && !uploadedImage) || isLoading) return
 
-        const userMsg = { role: 'user', content: input, id: crypto.randomUUID() }
+        const userMsg = {
+            role: 'user',
+            content: input,
+            id: crypto.randomUUID(),
+            type: uploadedImage ? 'image' : 'text',
+            mediaUrl: uploadedImage || undefined
+        }
         setMessages(prev => [...prev, userMsg])
         setInput("")
         setRecentPrompt(input)
@@ -386,7 +392,8 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
                                     )}
 
                                     {/* Cinema Spec Visualizer with Preview Generation */}
-                                    {msg.role === 'ai' && msg.specs && (
+                                    {/* Only show if specs exist AND at least one value is set */}
+                                    {msg.role === 'ai' && msg.specs && Object.values(msg.specs).some(v => v && v !== "") && (
                                         <div className="mt-4 space-y-3">
                                             {/* Spec Card */}
                                             <div className="grid grid-cols-2 gap-2 text-xs">
