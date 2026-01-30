@@ -1,5 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { CAMERA_OPTIONS, LENS_OPTIONS, LIGHTING_OPTIONS, MOVIE_LOOK_OPTIONS } from "../_shared/cinema-presets.ts";
+import { CAMERA_OPTIONS, LENS_OPTIONS, LIGHTING_OPTIONS, MOVIE_LOOK_OPTIONS, AUDIENCE_OPTIONS } from "../_shared/cinema-presets.ts";
 
 // Configuration
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
@@ -18,6 +18,7 @@ interface DirectorRequest {
     task_id?: string; // For polling
     style?: string;
     num_frames?: number;
+    audience?: string;
 }
 
 Deno.serve(async (req) => {
@@ -27,7 +28,7 @@ Deno.serve(async (req) => {
 
     try {
         const reqBody = await req.json() as DirectorRequest;
-        const { action, prompt, image_url, history, style = "Cinematic Realistic", num_frames = 6 } = reqBody;
+        const { action, prompt, image_url, history, style = "Cinematic Realistic", num_frames = 6, audience } = reqBody;
 
         if (!GEMINI_API_KEY) {
             throw new Error("Missing GEMINI_API_KEY");
@@ -47,7 +48,7 @@ Deno.serve(async (req) => {
         // ACTION 2: PLAN SEQUENCE
         // -------------------------------------------------------------------------
         if (action === "plan_sequence") {
-            const plan = await planSequence(prompt || "", image_url || "", style, num_frames);
+            const plan = await planSequence(prompt || "", image_url || "", style, num_frames, audience);
             return new Response(JSON.stringify(plan), {
                 headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
@@ -64,9 +65,10 @@ Deno.serve(async (req) => {
             if (reply.content.ready_for_storyboard) {
                 console.log("Director is ready. Generating storyboard for:", reply.content.refined_prompt);
                 const finalPrompt = reply.content.refined_prompt || prompt || "";
+                const finalAudience = reply.content.specs?.audience || audience;
 
                 // We use the same planSequence logic
-                const plan = await planSequence(finalPrompt, image_url || "", style, num_frames);
+                const plan = await planSequence(finalPrompt, image_url || "", style, num_frames, finalAudience);
 
                 // Attach the plan to the chat response so frontend can render it
                 reply.content.storyboard = plan;
@@ -185,7 +187,7 @@ async function analyzeImage(imageUrl: string) {
     return await callGemini(contents, { json: true });
 }
 
-async function planSequence(prompt: string, imageUrl: string, style: string, numFrames: number) {
+async function planSequence(prompt: string, imageUrl: string, style: string, numFrames: number, audience?: string) {
     let imagePart = null;
     if (imageUrl) {
         const base64 = await fetchImageBase64(imageUrl);
@@ -194,11 +196,10 @@ async function planSequence(prompt: string, imageUrl: string, style: string, num
 
     const systemInstruction = `You are a professional visual planner (Director AI). 
 Plan ${numFrames} frames that fulfill the brief.
-STYLE: ${style}
+SCENE STRUCTURE: Frames must be planned in Pairs (Start -> End) for each shot to ensure movement guidance.
+Example: Frame 1 (Shot Start), Frame 2 (Shot End), Frame 3 (Shot Start), Frame 4 (Shot End)...
 
-CONTEXT DETECTION:
-- Narrative: wide -> close-up -> action
-- Product: front -> side -> detail -> lifestyle
+TARGET AUDIENCE: ${audience || "General Audience"}
 
 OUTPUT FORMAT (JSON):
 {
@@ -208,12 +209,24 @@ OUTPUT FORMAT (JSON):
       "frame_number": 1,
       "shot_type": "wide/medium/close-up",
       "camera_angle": "eye-level/low/high",
-      "description": "Detailed visual description",
-      "movement": "Camera movement (pan/tilt/dolly)",
+      "description": "Start frame of the action. Describe the initial state/pose.",
+      "is_keyframe_b": false,
+      "linked_frame_id": "2",
+      "motion_description": "e.g., Dolly zoom in while character reaches for product",
+      "lighting_override": "Shot style",
+      "background_id": "bg1"
+    },
+    {
+      "frame_number": 2,
+      "shot_type": "wide/medium/close-up",
+      "camera_angle": "eye-level/low/high",
+      "description": "End frame of the action. Describe the final state/result.",
+      "is_keyframe_b": true,
+      "linked_frame_id": "1",
       "background_id": "bg1"
     }
   ],
-  "consistency_rules": "..."
+  "consistency_rules": "Detailed physical description of main subject/product. Target audience focused."
 }
 `;
 
@@ -350,28 +363,33 @@ async function chatWithDirector(history: any[], lastUserMessage: string, imageUr
     const cameraList = CAMERA_OPTIONS.map(c => c.label).join(", ");
     const lensList = LENS_OPTIONS.map(l => l.label).join(", ");
     const lightingList = LIGHTING_OPTIONS.map(l => l.label).join(", ");
+    const audienceList = AUDIENCE_OPTIONS.map(a => `${a.label} (${a.description})`).join(", ");
 
     const systemPrompt = `You are a friendly, enthusiastic, and highly skilled Creative Director AI.
-    Tools: CAMERAS (${cameraList}), LENSES (${lensList}), LIGHTING (${lightingList}).
+    Tools: CAMERAS (${cameraList}), LENSES (${lensList}), LIGHTING (${lightingList}), AUDIENCES (${audienceList}).
     
     GOAL: Collaborate with the user to build a stunning visual story. 
     TONE: Warm, encouraging, pro-active, and curious. Use emojis occasionally (🎬, ✨, 🎥).
     
     PROCESS:
-    1. **First Interaction:** If the user just states a subject (e.g., "I want an ad for Stanley"), DO NOT fill in the specs yet. Instead, say something like "That sounds amazing! 🤩 A Stanley thermos deserves a great look. Are we going for a rugged outdoor adventure vibe 🌲, or a clean, modern studio look? 💡"
-    2. **Middle Interaction:** Ask 1 clearly defined question to narrow down Mood, Lighting, or Story.
-    3. **Final Interaction:** ONLY when the User confirms the style/mood, OR explicitly says "Start" or "Generate", THEN fill in the "specs" and set "ready_for_storyboard": true.
+    1. **First Interaction:** If the user just states a subject (e.g., "I want an ad for Stanley"), DO NOT fill in the specs yet. Instead:
+       - Acknowledge the subject warmly.
+       - ASK: "Who are we targeting with this ad? Gen Z athletes? Professionals? Millennials?" (List 2-3 specific audience options from your knowledge).
+       - Also ask about the overall vibe.
+    2. **Middle Interaction:** Ask 1 clearly defined question to narrow down Mood, Lighting, or Story. ensure the audience is confirmed before moving to storyboard.
+    3. **Final Interaction:** ONLY when the User confirms the style/mood AND Target Audience, THEN fill in the "specs" and set "ready_for_storyboard": true.
 
     OUTPUT FORMAT: JSON ONLY.
     {
       "message": "Your friendly response here.",
       "ready_for_storyboard": boolean,
-      "refined_prompt": "Only explicitly fill this if ready=true",
+      "refined_prompt": "Only explicitly fill this if ready=true. Include audience traits in this prompt.",
       "specs": {
-        "camera": "", // Leave empty if not sure yet
-        "lens": "",   // Leave empty if not sure yet
-        "lighting": "", // Leave empty if not sure yet
-        "mood": ""    // Leave empty if not sure yet
+        "camera": "", 
+        "lens": "",   
+        "lighting": "", 
+        "mood": "",
+        "audience": "" // Must be one of: ${AUDIENCE_OPTIONS.map(a => a.id).join(", ")}
       }
     }
     IMPORTANT: Do NOT guess specs in the first turn. Leave them empty string "" until you have a clear agreement.`;

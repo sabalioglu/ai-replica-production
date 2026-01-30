@@ -11,7 +11,7 @@ const corsHeaders = {
 };
 
 interface PopcornRequest {
-    action: 'plan' | 'generate_frame' | 'generate_background' | 'generate_video';
+    action: 'plan' | 'generate_frame' | 'generate_background' | 'generate_video' | 'create_anchor_image';
     prompt?: string;
     reference_urls?: string[];
     num_frames?: number;
@@ -22,6 +22,8 @@ interface PopcornRequest {
     all_references?: any[];
     bg_url?: string;
     image_url?: string; // For video gen
+    anchor_image_url?: string; // For consistency
+    audience?: string;
 }
 
 Deno.serve(async (req) => {
@@ -40,7 +42,7 @@ Deno.serve(async (req) => {
             );
 
             // 2. Plan Sequence (LLM)
-            const plan = await planSequence(prompt || "", analyzedRefs, num_frames, style);
+            const plan = await planSequence(prompt || "", analyzedRefs, num_frames, style, body.audience);
 
             return new Response(JSON.stringify({ plan, references: analyzedRefs }), {
                 headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -73,6 +75,15 @@ Deno.serve(async (req) => {
 
             const videoUrl = await animateWithKieVeo(image_url, videoPrompt || "");
             return new Response(JSON.stringify({ url: videoUrl }), {
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+        }
+
+        if (action === 'create_anchor_image') {
+            const { prompt: anchorPrompt, reference_urls, audience } = body;
+            // Generate a 'hero' shot of the subject/product to fix consistency
+            const anchorImageUrl = await createAnchorImage(anchorPrompt || "", reference_urls || [], style, audience);
+            return new Response(JSON.stringify({ url: anchorImageUrl }), {
                 headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
         }
@@ -212,26 +223,39 @@ async function analyzeReference(url: string, index: number) {
     return await callGemini(contents, { json: true });
 }
 
-async function planSequence(prompt: string, references: any[], numFrames: number, style: string) {
+async function planSequence(prompt: string, references: any[], numFrames: number, style: string, audience?: string) {
     const refContext = references.map((r, i) => `Ref ${i + 1} (${r.type}): ${r.description}. Features: ${r.key_features.join(", ")}`).join("\n");
 
     const systemInstruction = `You are a world-class Film Director and Cinematographer.
     Plan a coherent ${numFrames}-frame sequence for: "${prompt}"
     Style: ${style}
     
-    References Context:
-    ${refContext}
+    STRUCTURE: Frames must be in pairs (Frame 1: Start, Frame 2: End).
+    
+    Target Audience: ${audience || "General Audience"}
 
     Background Handling:
     - Define 1-2 consistent backgrounds.
-    - Notes: Do NOT mention characters in background descriptions.
     
     Return JSON:
     {
       "backgrounds": [ { "id": "bg1", "description": "..." } ],
       "frames": [
         {
-          "visual_prompt": "detailed prompt for text-to-image model (Nano Banana Pro), describing subject, action, lighting, camera",
+          "frame_number": 1,
+          "visual_prompt": "Detailed start frame prompt",
+          "is_keyframe_b": false,
+          "linked_frame_id": "2",
+          "motion_description": "Movement between frames",
+          "camera_angle": "Low Angle",
+          "shot_type": "Close Up",
+          "background_id": "bg1"
+        },
+        {
+          "frame_number": 2,
+          "visual_prompt": "Detailed end frame prompt",
+          "is_keyframe_b": true,
+          "linked_frame_id": "1",
           "camera_angle": "Low Angle",
           "shot_type": "Close Up",
           "background_id": "bg1"
@@ -254,32 +278,32 @@ async function generateBackground(bgPlan: any, style: string) {
     });
 }
 
-async function generateFrame(framePlan: any, refs: any[], bgUrl: string | undefined, style: string) {
+async function generateFrame(framePlan: any, refs: any[], bgUrl: string | undefined, style: string, anchorImageUrl?: string) {
     // Find character references
     const charRefs = refs.filter(r => r.type === 'character' || r.type === 'product');
     const charDesc = charRefs.map(r => `Subject details: ${r.description}. Key features: ${r.key_features.join(", ")}.`).join(" ");
 
-    // Initialize Supabase Client for DB access
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
     // Explicitly use prompt structure that works well for Flux/Imagen/etc
-    let prompt = `Cinematic shot, ${style}. Shot type: ${framePlan.shot_type}. Angle: ${framePlan.camera_angle}.
+    const currentStyle = framePlan.lighting_override || framePlan.mood_override
+        ? `${framePlan.lighting_override || ''} ${framePlan.mood_override || ''}`
+        : style;
+
+    let prompt = `Cinematic shot, ${currentStyle}. Shot type: ${framePlan.shot_type}. Angle: ${framePlan.camera_angle}.
 Scene: ${framePlan.visual_prompt}.
 ${charDesc}
 Environment context: ${bgUrl ? 'Consistent with established background.' : ''}
 Photorealistic, movie still, 8k, highly detailed.`;
 
     // References for image-to-image or structural control
-    // Nano Banana Pro supports 'image_input'
-    const inputImages = refs.filter(r => r.url).map(r => r.url);
+    // If we have a consistent anchor image, use it with high importance
+    const inputImages = anchorImageUrl ? [anchorImageUrl] : refs.filter(r => r.url).map(r => r.url);
+    const imgStrength = anchorImageUrl ? 0.65 : 0.35; // Stronger influence if anchor is provided
 
     return await generateWithKie({
         prompt: prompt,
-        image_input: inputImages, // Using correct parameter from docs
-        image_strength: 0.35, // Reduce influence to allow composition changes (Standard is usually 0.5-0.7)
-        seed: Math.floor(Math.random() * 1000000000), // Force random seed to prevent duplicate generations
+        image_input: inputImages,
+        image_strength: imgStrength,
+        seed: Math.floor(Math.random() * 1000000000),
         aspect_ratio: "16:9",
         resolution: "2K",
         output_format: "png"
@@ -340,4 +364,22 @@ async function animateWithKieVeo(imageUrl: string, prompt: string): Promise<stri
         attempts++;
     }
     throw new Error("Kie Veo Timeout");
+}
+
+async function createAnchorImage(prompt: string, refs: string[], style: string, audience?: string): Promise<string> {
+    // Create a hero shot that anchors character and product
+    const anchorPrompt = `High-end commercial hero shot, ${style}. 
+A person (fitting the ${audience || "general"} target audience) prominently and clearly using or interacting with the subject/product. 
+Detailed features: ${prompt}. 
+BLUE earbuds must be clearly visible and worn correctly.
+Photorealistic, 8k, studio lighting, sharp focus on product and subject.`;
+
+    return await generateWithKie({
+        prompt: anchorPrompt,
+        image_input: refs,
+        image_strength: 0.75, // Strong reference to the uploaded product photo
+        aspect_ratio: "16:9",
+        resolution: "2K",
+        output_format: "png"
+    });
 }

@@ -3,7 +3,7 @@ export interface SelectionOption {
     id: string;
     label: string;
     description?: string;
-    type: 'camera' | 'lens' | 'film_stock' | 'lighting' | 'angle' | 'shot_type' | 'look' | 'genre' | 'photographer';
+    type: 'camera' | 'lens' | 'film_stock' | 'lighting' | 'angle' | 'shot_type' | 'look' | 'genre' | 'photographer' | 'audience';
 }
 
 export const CAMERA_OPTIONS: SelectionOption[] = [
@@ -108,4 +108,12 @@ export const ANGLE_OPTIONS: SelectionOption[] = [
     { id: 'high-angle', label: 'High Angle', type: 'angle' },
     { id: 'dutch-angle', label: 'Dutch Angle', type: 'angle' },
     { id: 'birds-eye', label: 'Bird\'s Eye', type: 'angle' },
+];
+
+export const AUDIENCE_OPTIONS: SelectionOption[] = [
+    { id: 'gen-z', label: 'Gen Z (18-24)', description: 'Energetic, trendy, bold colors, modern setting', type: 'audience' },
+    { id: 'millennials', label: 'Millennials (25-40)', description: 'Professional, relatable, authentic, clean aesthetic', type: 'audience' },
+    { id: 'gen-x', label: 'Gen X (41-55)', description: 'Experienced, credible, sophisticated, premium look', type: 'audience' },
+    { id: 'all-ages', label: 'All Ages', description: 'Universal appeal, diverse, friendly lighting', type: 'audience' },
+    { id: 'professional', label: 'Business/Professional', description: 'Corporate setting, sharp, formal, high-end', type: 'audience' },
 ];
