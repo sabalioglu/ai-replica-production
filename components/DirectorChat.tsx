@@ -9,7 +9,11 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Card } from "@/components/ui/card"
 import { Paperclip, Send, Loader2, Sparkles, Film, Download, RefreshCw, X, Play } from "lucide-react"
 import { CinemaControls } from "@/components/CinemaControls"
+import { StoryboardGrid } from "@/components/StoryboardGrid"
 import { cn } from "@/lib/utils"
+import { PopcornSequence } from "@/types/cinema"
+import { supabase } from "@/lib/supabase"
+import { toast } from "sonner"
 
 // --- Media Preview Component (Dark Theme) ---
 const MediaPreview = ({ src, type, onAnimate, isAnimating }: { src: string, type: 'image' | 'video', onAnimate?: () => void, isAnimating?: boolean }) => {
@@ -60,7 +64,8 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
         projectPlan?: any,
         specs?: any,
         previewUrl?: string | null,
-        videoUrl?: string | null
+        videoUrl?: string | null,
+        storyboard?: PopcornSequence
     }>>([
         {
             role: 'assistant',
@@ -424,6 +429,13 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
                                         </div>
                                     )}
 
+                                    {/* Render Storyboard Grid */}
+                                    {msg.storyboard && (
+                                        <StoryboardGrid
+                                            sequence={msg.storyboard}
+                                        />
+                                    )}
+
                                 </div>
                             </div>
                         ))}
@@ -540,6 +552,43 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
                                     onSpecChange={(key, val) => setManualSpecs((prev: any) => ({ ...prev, [key]: val }))}
                                     className="scale-90 origin-right"
                                 />
+
+                                <Button
+                                    onClick={async () => {
+                                        setIsLoading(true);
+                                        try {
+                                            const { data, error } = await supabase.functions.invoke('cinema-popcorn', {
+                                                body: {
+                                                    action: 'plan',
+                                                    prompt: recentPrompt || input,
+                                                    reference_urls: uploadedImage ? [uploadedImage] : [],
+                                                    style: "Cinematic Realistic"
+                                                }
+                                            });
+                                            if (data?.plan) {
+                                                setMessages(prev => [...prev, {
+                                                    role: 'assistant',
+                                                    content: "I've planned a cinematic storyboard sequence for you. Ready to generate the frames?",
+                                                    storyboard: data,
+                                                    id: `storyboard-${Date.now()}`
+                                                }]);
+                                            }
+                                        } catch (err: any) {
+                                            console.error("Storyboard Plan Error:", err);
+                                            toast.error("Storyboard generation failed", {
+                                                description: err.message || "Please check if the Edge Function is deployed.",
+                                            });
+                                        } finally {
+                                            setIsLoading(false);
+                                        }
+                                    }}
+                                    disabled={isLoading || (!input && !uploadedImage)}
+                                    variant="outline"
+                                    className="rounded-2xl px-6 h-10 font-bold text-xs uppercase tracking-tight border-zinc-200 text-gray-700 hover:bg-zinc-50 transition-all gap-2"
+                                >
+                                    <Film className="w-4 h-4 text-purple-600" />
+                                    <span>Storyboard</span>
+                                </Button>
 
                                 <Button
                                     onClick={handleSendMessage}
