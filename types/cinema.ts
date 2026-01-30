@@ -7,6 +7,7 @@ export interface StoryboardFrameDetails {
     background_id: string;
     consistency_rules?: string;
     url?: string;
+    video_url?: string;
     status?: 'idle' | 'generating' | 'completed' | 'error';
 }
 

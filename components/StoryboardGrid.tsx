@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Loader2, Sparkles, Image as ImageIcon, CheckCircle2, AlertCircle } from "lucide-react"
+import { Loader2, Sparkles, Image as ImageIcon, CheckCircle2, AlertCircle, Video, Play } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { PopcornSequence, StoryboardFrameDetails } from "@/types/cinema"
 import { supabase } from "@/lib/supabase"
@@ -35,6 +35,7 @@ export function StoryboardGrid({ sequence, onFrameUpdate }: StoryboardGridProps)
 
     const [frames, setFrames] = useState<StoryboardFrameDetails[]>(initialFrames)
     const [generatingIds, setGeneratingIds] = useState<number[]>([])
+    const [animatingIds, setAnimatingIds] = useState<number[]>([])
     const [bgUrls, setBgUrls] = useState<Record<string, string>>({})
 
     const [hasStarted, setHasStarted] = useState(false)
@@ -115,6 +116,35 @@ export function StoryboardGrid({ sequence, onFrameUpdate }: StoryboardGridProps)
         setHasStarted(false) // Allow retry if needed
     }
 
+    const handleAnimateFrame = async (frameNumber: number, imageUrl: string, visualPrompt: string) => {
+        if (animatingIds.includes(frameNumber)) return;
+
+        setAnimatingIds(prev => [...prev, frameNumber]);
+
+        try {
+            const { data, error } = await supabase.functions.invoke('cinema-popcorn', {
+                body: {
+                    action: 'generate_video',
+                    image_url: imageUrl,
+                    prompt: visualPrompt
+                }
+            });
+
+            if (data?.url) {
+                setFrames(prev => prev.map(f =>
+                    f.frame_number === frameNumber ? { ...f, video_url: data.url } : f
+                ));
+                if (onFrameUpdate) onFrameUpdate(frameNumber, data.url);
+            } else {
+                console.error("Video generation failed:", error);
+            }
+        } catch (e) {
+            console.error("Animate Error:", e);
+        } finally {
+            setAnimatingIds(prev => prev.filter(id => id !== frameNumber));
+        }
+    }
+
     return (
         <div className="space-y-6 mt-4">
             <div className="flex items-center justify-between">
@@ -142,7 +172,16 @@ export function StoryboardGrid({ sequence, onFrameUpdate }: StoryboardGridProps)
                 {frames.map((frame, index) => (
                     <Card key={`${frame.frame_number}-${index}`} className="bg-zinc-900 border-zinc-800 overflow-hidden group">
                         <div className="aspect-video bg-zinc-950 relative flex items-center justify-center">
-                            {frame.url ? (
+                            {frame.video_url ? (
+                                <video
+                                    src={frame.video_url}
+                                    className="w-full h-full object-cover"
+                                    autoPlay
+                                    loop
+                                    muted
+                                    playsInline
+                                />
+                            ) : frame.url ? (
                                 <img src={frame.url} alt={`Frame ${frame.frame_number}`} className="w-full h-full object-cover" />
                             ) : (
                                 <div className="flex flex-col items-center gap-2 text-zinc-600">
@@ -159,9 +198,29 @@ export function StoryboardGrid({ sequence, onFrameUpdate }: StoryboardGridProps)
                                     )}
                                 </div>
                             )}
+
+                            {/* Overlay Controls */}
                             <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-black/60 backdrop-blur-md border border-white/10 text-[10px] font-bold text-white uppercase tracking-tighter">
                                 Frame {frame.frame_number}
                             </div>
+
+                            {frame.url && !frame.video_url && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Button
+                                        size="sm"
+                                        onClick={() => handleAnimateFrame(frame.frame_number, frame.url!, frame.description)}
+                                        disabled={animatingIds.includes(frame.frame_number)}
+                                        className="bg-indigo-600 hover:bg-indigo-500 text-white rounded-full h-10 px-4 gap-2 shadow-xl"
+                                    >
+                                        {animatingIds.includes(frame.frame_number) ? (
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                        ) : (
+                                            <Video className="w-4 h-4" />
+                                        )}
+                                        {animatingIds.includes(frame.frame_number) ? "Animating..." : "Animate"}
+                                    </Button>
+                                </div>
+                            )}
                         </div>
                         <div className="p-3 space-y-1">
                             <div className="flex items-center justify-between">
