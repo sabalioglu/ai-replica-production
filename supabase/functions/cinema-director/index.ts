@@ -13,12 +13,14 @@ interface DirectorRequest {
     action: 'analyze_image' | 'plan_sequence' | 'chat' | 'generate_preview' | 'animate_preview' | 'check_status';
     prompt?: string;
     image_urls?: string[];
-    history?: any[]; // For chat context
-    specs?: any; // For image generation
-    task_id?: string; // For polling
+    image_url?: string; // Flexible for animation input
+    history?: any[];
+    specs?: any;
+    task_id?: string;
     style?: string;
     num_frames?: number;
     audience?: string;
+    settings?: any; // For dynamic control
 }
 
 Deno.serve(async (req) => {
@@ -142,8 +144,8 @@ async function fetchImageBase64(url: string): Promise<string> {
 }
 
 async function callGemini(contents: any[], options: { json?: boolean } = {}) {
-    const model = "gemini-3-flash-preview";
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+    const model = "gemini-2.0-flash-exp";
+    const url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + GEMINI_API_KEY;
 
     const body: any = {
         contents: contents,
@@ -233,7 +235,7 @@ OUTPUT FORMAT (JSON):
 }
 `;
 
-    const parts = [{ text: `Prompt: ${prompt}\n\n${systemInstruction}` }];
+    const parts = [{ text: "Prompt: " + prompt + "\n\n" + systemInstruction }];
     if (imagesParts.length > 0) parts.push(...imagesParts);
 
     const contents = [{ role: "user", parts }];
@@ -379,34 +381,7 @@ async function chatWithDirector(history: any[], lastUserMessage: string, imageUr
     const lightingList = LIGHTING_OPTIONS.map(l => l.label).join(", ");
     const audienceList = AUDIENCE_OPTIONS.map(a => `${a.label} (${a.description})`).join(", ");
 
-    const systemPrompt = `You are a friendly, enthusiastic, and highly skilled Creative Director AI.
-    Tools: CAMERAS (${cameraList}), LENSES (${lensList}), LIGHTING (${lightingList}), AUDIENCES (${audienceList}).
-    
-    GOAL: Collaborate with the user to build a stunning visual story. 
-    TONE: Warm, encouraging, pro-active, and curious. Use emojis occasionally (🎬, ✨, 🎥).
-    
-    PROCESS:
-    1. **First Interaction:** If the user just states a subject (e.g., "I want an ad for Stanley"), DO NOT fill in the specs yet. Instead:
-       - Acknowledge the subject warmly.
-       - ASK: "Who are we targeting with this ad? Gen Z athletes? Professionals? Millennials?" (List 2-3 specific audience options from your knowledge).
-       - Also ask about the overall vibe.
-    2. **Middle Interaction:** Ask 1 clearly defined question to narrow down Mood, Lighting, or Story. ensure the audience is confirmed before moving to storyboard.
-    3. **Final Interaction:** ONLY when the User confirms the style/mood AND Target Audience, THEN fill in the "specs" and set "ready_for_storyboard": true.
-
-    OUTPUT FORMAT: JSON ONLY.
-    {
-      "message": "Your friendly response here.",
-      "ready_for_storyboard": boolean,
-      "refined_prompt": "Only explicitly fill this if ready=true. Include audience traits in this prompt.",
-      "specs": {
-        "camera": "", 
-        "lens": "",   
-        "lighting": "", 
-        "mood": "",
-        "audience": "" // Must be one of: ${AUDIENCE_OPTIONS.map(a => a.id).join(", ")}
-      }
-    }
-    IMPORTANT: Do NOT guess specs in the first turn. Leave them empty string "" until you have a clear agreement.`;
+    const systemPrompt = "You are a Creative Director AI.\nCRITICAL WORKFLOW:\n1. Confirm Audience.\n2. Confirm Vibe.\n3. Suggest HERO SHOT. Fill in 'specs' but DO NOT set 'ready_for_storyboard' until character confirmed.\n4. Set 'ready_for_storyboard' ONLY after character visual confirmation.\n\nOUTPUT FORMAT: JSON ONLY.\n{\n  \"message\": \"...\",\n  \"ready_for_storyboard\": boolean,\n  \"refined_prompt\": \"...\",\n  \"specs\": { \"camera\": \"\", \"lens\": \"\", \"lighting\": \"\", \"mood\": \"\", \"audience\": \"\" }\n}";
 
     // Convert history format (assuming standard [{role, content}]) to Gemini ({role: "user"|"model", parts: [{text}]})
     const geminiHistory = history.map((msg: any) => {

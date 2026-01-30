@@ -102,7 +102,7 @@ Deno.serve(async (req) => {
 
 async function callGemini(contents: any[], options: { json?: boolean } = {}) {
     // Validated by user docs: gemini-2.5-flash-lite is the stable, fast, cost-effective model
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${GEMINI_API_KEY}`;
+    const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + GEMINI_API_KEY;
 
     const body: any = {
         contents,
@@ -224,44 +224,9 @@ async function analyzeReference(url: string, index: number) {
 }
 
 async function planSequence(prompt: string, references: any[], numFrames: number, style: string, audience?: string) {
-    const refContext = references.map((r, i) => `Ref ${i + 1} (${r.type}): ${r.description}. Features: ${r.key_features.join(", ")}`).join("\n");
+    const refContext = references.map((r, i) => "Ref " + (i + 1) + " (" + r.type + "): " + r.description + ". Features: " + r.key_features.join(", ")).join("\n");
 
-    const systemInstruction = `You are a world-class Film Director and Cinematographer.
-    Plan a coherent ${numFrames}-frame sequence for: "${prompt}"
-    Style: ${style}
-    
-    STRUCTURE: Frames must be in pairs (Frame 1: Start, Frame 2: End).
-    
-    Target Audience: ${audience || "General Audience"}
-
-    Background Handling:
-    - Define 1-2 consistent backgrounds.
-    
-    Return JSON:
-    {
-      "backgrounds": [ { "id": "bg1", "description": "..." } ],
-      "frames": [
-        {
-          "frame_number": 1,
-          "visual_prompt": "Detailed start frame prompt",
-          "is_keyframe_b": false,
-          "linked_frame_id": "2",
-          "motion_description": "Movement between frames",
-          "camera_angle": "Low Angle",
-          "shot_type": "Close Up",
-          "background_id": "bg1"
-        },
-        {
-          "frame_number": 2,
-          "visual_prompt": "Detailed end frame prompt",
-          "is_keyframe_b": true,
-          "linked_frame_id": "1",
-          "camera_angle": "Low Angle",
-          "shot_type": "Close Up",
-          "background_id": "bg1"
-        }
-      ]
-    }`;
+    const systemInstruction = "You are a world-class Film Director and Cinematographer.\nPlan a coherent " + numFrames + "-frame sequence for: \"" + prompt + "\"\nStyle: " + style + "\n\nSTRUCTURE: Frames must be in pairs (Frame 1: Start, Frame 2: End).\n\nTarget Audience: " + (audience || "General Audience") + "\n\nBackground Handling:\n- Define 1-2 consistent backgrounds.\n\nReturn JSON:\n{\n  \"backgrounds\": [ { \"id\": \"bg1\", \"description\": \"...\" } ],\n  \"frames\": [\n    {\n      \"frame_number\": 1,\n      \"visual_prompt\": \"Detailed start frame prompt\",\n      \"is_keyframe_b\": false,\n      \"linked_frame_id\": \"2\",\n      \"motion_description\": \"Movement between frames\",\n      \"camera_angle\": \"Low Angle\",\n      \"shot_type\": \"Close Up\",\n      \"background_id\": \"bg1\"\n    },\n    {\n      \"frame_number\": 2,\n      \"visual_prompt\": \"Detailed end frame prompt\",\n      \"is_keyframe_b\": true,\n      \"linked_frame_id\": \"1\",\n      \"camera_angle\": \"Low Angle\",\n      \"shot_type\": \"Close Up\",\n      \"background_id\": \"bg1\"\n    }\n  ]\n}";
 
     const contents = [{ role: "user", parts: [{ text: systemInstruction }] }];
     return await callGemini(contents, { json: true });
