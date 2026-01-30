@@ -268,6 +268,7 @@ Photorealistic, movie still, 8k, highly detailed.`;
         prompt: prompt,
         image_input: inputImages, // Using correct parameter from docs
         image_strength: 0.35, // Reduce influence to allow composition changes (Standard is usually 0.5-0.7)
+        seed: Math.floor(Math.random() * 1000000000), // Force random seed to prevent duplicate generations
         aspect_ratio: "16:9",
         resolution: "2K",
         output_format: "png"
