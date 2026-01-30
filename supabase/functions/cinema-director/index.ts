@@ -1,4 +1,3 @@
-
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { CAMERA_OPTIONS, LENS_OPTIONS, LIGHTING_OPTIONS, MOVIE_LOOK_OPTIONS } from "../_shared/cinema-presets.ts";
 
@@ -59,6 +58,20 @@ Deno.serve(async (req) => {
         // -------------------------------------------------------------------------
         if (action === "chat") {
             const reply = await chatWithDirector(history || [], prompt || "", image_url);
+
+            // AUTO-STORYBOARD TRIGGER
+            // If the AI Director decides the vision is ready, we generate the plan immediately.
+            if (reply.content.ready_for_storyboard) {
+                console.log("Director is ready. Generating storyboard for:", reply.content.refined_prompt);
+                const finalPrompt = reply.content.refined_prompt || prompt || "";
+
+                // We use the same planSequence logic
+                const plan = await planSequence(finalPrompt, image_url || "", style, num_frames);
+
+                // Attach the plan to the chat response so frontend can render it
+                reply.content.storyboard = plan;
+            }
+
             return new Response(JSON.stringify(reply), {
                 headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
@@ -339,20 +352,27 @@ async function chatWithDirector(history: any[], lastUserMessage: string, imageUr
     const lightingList = LIGHTING_OPTIONS.map(l => l.label).join(", ");
 
     const systemPrompt = `You are an expert Creative Director.
-Tools: CAMERAS (${cameraList}), LENSES (${lensList}), LIGHTING (${lightingList}).
+    Tools: CAMERAS (${cameraList}), LENSES (${lensList}), LIGHTING (${lightingList}).
+    
+    GOAL: Guide the user to a clear vision. Do NOT just say "Okay".
+    PROCESS:
+    1. If the user's request is vague or text-only, ask 1-2 SHORT, specific questions about Mood, Lighting, or Story logic to refine the vision.
+    2. If the user provides an image, rely on it but ask about the desired motion or atmosphere.
+    3. If the vision is clear (subject + mood + context are known) OR the user asks to "start/generate", set "ready_for_storyboard": true.
 
-GOAL: Clarify Product, Audience, Vibe.
-OUTPUT FORMAT: JSON ONLY.
-{
-  "message": "Short, friendly, non-technical explanation of your creative vision.",
-  "specs": {
-    "camera": "Best camera choice",
-    "lens": "Best lens choice",
-    "lighting": "Best lighting choice",
-    "mood": "2-3 word mood description"
-  }
-}
-If you don't have enough info yet, suggest defaults in specs but ask clarifying questions in the message.`;
+    OUTPUT FORMAT: JSON ONLY.
+    {
+      "message": "Short, friendly response. If asking questions, be concise.",
+      "ready_for_storyboard": boolean, // TRUE only when you have enough info to plan 6 frames.
+      "refined_prompt": "The detailed visual prompt summarizing the agreed vision (Required if ready=true).",
+      "specs": {
+        "camera": "Best camera choice",
+        "lens": "Best lens choice",
+        "lighting": "Best lighting choice",
+        "mood": "2-3 word mood description"
+      }
+    }
+    If not ready, ready_for_storyboard MUST be false.`;
 
     // Convert history format (assuming standard [{role, content}]) to Gemini ({role: "user"|"model", parts: [{text}]})
     const geminiHistory = history.map((msg: any) => {

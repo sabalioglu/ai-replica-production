@@ -150,6 +150,7 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
             // User requested manual control overrides. So let's say AI suggests, but user can change it.
             // We'll update state to show what AI thinks, but user can click to change.
             let messageContent = data.content;
+            let storyboardInfo = null;
 
             if (typeof data.content === 'object') {
                 if (data.content.specs) {
@@ -158,11 +159,19 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
                         ...data.content.specs
                     }))
                 }
+                if (data.content.storyboard) {
+                    storyboardInfo = data.content.storyboard;
+                }
                 // Extract the text message to prevent React render error (Error #31)
                 messageContent = data.content.message || JSON.stringify(data.content);
             }
 
-            setMessages(prev => [...prev, { role: 'assistant', content: messageContent, id: crypto.randomUUID() }])
+            setMessages(prev => [...prev, {
+                role: 'assistant',
+                content: messageContent,
+                id: crypto.randomUUID(),
+                storyboard: storyboardInfo // Pass the AI-generated storyboard
+            }])
             if (uploadedImage) setUploadedImage(null)
 
         } catch (error) {
@@ -559,42 +568,7 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
                                     className="scale-90 origin-right"
                                 />
 
-                                <Button
-                                    onClick={async () => {
-                                        setIsLoading(true);
-                                        try {
-                                            const { data, error } = await supabase.functions.invoke('cinema-popcorn', {
-                                                body: {
-                                                    action: 'plan',
-                                                    prompt: recentPrompt || input,
-                                                    reference_urls: uploadedImage ? [uploadedImage] : [],
-                                                    style: "Cinematic Realistic"
-                                                }
-                                            });
-                                            if (data?.plan) {
-                                                setMessages(prev => [...prev, {
-                                                    role: 'assistant',
-                                                    content: "I've planned a cinematic storyboard sequence for you. Ready to generate the frames?",
-                                                    storyboard: data,
-                                                    id: `storyboard-${Date.now()}`
-                                                }]);
-                                            }
-                                        } catch (err: any) {
-                                            console.error("Storyboard Plan Error:", err);
-                                            toast.error("Storyboard generation failed", {
-                                                description: err.message || "Please check if the Edge Function is deployed.",
-                                            });
-                                        } finally {
-                                            setIsLoading(false);
-                                        }
-                                    }}
-                                    disabled={isLoading || (!input && !uploadedImage)}
-                                    variant="outline"
-                                    className="rounded-2xl px-6 h-10 font-bold text-xs uppercase tracking-tight border-zinc-200 text-gray-700 hover:bg-zinc-50 transition-all gap-2"
-                                >
-                                    <Film className="w-4 h-4 text-purple-600" />
-                                    <span>Storyboard</span>
-                                </Button>
+
 
                                 <Button
                                     onClick={handleSendMessage}
