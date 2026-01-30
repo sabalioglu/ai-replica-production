@@ -91,8 +91,8 @@ export function StoryboardGrid({ sequence, onFrameUpdate }: StoryboardGridProps)
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {frames.map((frame) => (
-                    <Card key={frame.frame_number} className="bg-zinc-900 border-zinc-800 overflow-hidden group">
+                {frames.map((frame, index) => (
+                    <Card key={`${frame.frame_number}-${index}`} className="bg-zinc-900 border-zinc-800 overflow-hidden group">
                         <div className="aspect-video bg-zinc-950 relative flex items-center justify-center">
                             {frame.url ? (
                                 <img src={frame.url} alt={`Frame ${frame.frame_number}`} className="w-full h-full object-cover" />
