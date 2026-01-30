@@ -12,7 +12,7 @@ const corsHeaders = {
 interface DirectorRequest {
     action: 'analyze_image' | 'plan_sequence' | 'chat' | 'generate_preview' | 'animate_preview' | 'check_status';
     prompt?: string;
-    image_url?: string;
+    image_urls?: string[];
     history?: any[]; // For chat context
     specs?: any; // For image generation
     task_id?: string; // For polling
@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
 
     try {
         const reqBody = await req.json() as DirectorRequest;
-        const { action, prompt, image_url, history, style = "Cinematic Realistic", num_frames = 6, audience } = reqBody;
+        const { action, prompt, image_urls, history, style = "Cinematic Realistic", num_frames = 6, audience } = reqBody;
 
         if (!GEMINI_API_KEY) {
             throw new Error("Missing GEMINI_API_KEY");
@@ -37,8 +37,8 @@ Deno.serve(async (req) => {
         // -------------------------------------------------------------------------
         // ACTION 1: ANALYZE IMAGE (Vision)
         // -------------------------------------------------------------------------
-        if (action === "analyze_image" && image_url) {
-            const analysis = await analyzeImage(image_url);
+        if (action === "analyze_image" && image_urls && image_urls.length > 0) {
+            const analysis = await analyzeImage(image_urls[0]);
             return new Response(JSON.stringify(analysis), {
                 headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
         // ACTION 2: PLAN SEQUENCE
         // -------------------------------------------------------------------------
         if (action === "plan_sequence") {
-            const plan = await planSequence(prompt || "", image_url || "", style, num_frames, audience);
+            const plan = await planSequence(prompt || "", image_urls, style, num_frames, audience);
             return new Response(JSON.stringify(plan), {
                 headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
         // ACTION 3: CHAT (Collaborative Director)
         // -------------------------------------------------------------------------
         if (action === "chat") {
-            const reply = await chatWithDirector(history || [], prompt || "", image_url);
+            const reply = await chatWithDirector(history || [], prompt || "", image_urls, reqBody.specs, reqBody.settings);
 
             // AUTO-STORYBOARD TRIGGER
             // If the AI Director decides the vision is ready, we generate the plan immediately.
@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
                 const finalAudience = reply.content.specs?.audience || audience;
 
                 // We use the same planSequence logic
-                const plan = await planSequence(finalPrompt, image_url || "", style, num_frames, finalAudience);
+                const plan = await planSequence(finalPrompt, image_urls, style, num_frames, finalAudience);
 
                 // Attach the plan to the chat response so frontend can render it
                 reply.content.storyboard = plan;
@@ -97,10 +97,11 @@ Deno.serve(async (req) => {
         // ACTION 5: ANIMATE PREVIEW (Video)
         // -------------------------------------------------------------------------
         if (action === "animate_preview") {
-            if (!image_url) throw new Error("Image URL required for animation");
+            const previewImageUrl = image_urls?.[0] || reqBody.image_url; // Fallback for safety
+            if (!previewImageUrl) throw new Error("Image URL required for animation");
 
             // Start Video Gen (Returns Task ID)
-            const taskId = await startVideoGeneration(image_url, prompt || "Cinematic slow motion");
+            const taskId = await startVideoGeneration(previewImageUrl, prompt || "Cinematic slow motion");
 
             return new Response(JSON.stringify({ task_id: taskId, status: "processing" }), {
                 headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -187,11 +188,13 @@ async function analyzeImage(imageUrl: string) {
     return await callGemini(contents, { json: true });
 }
 
-async function planSequence(prompt: string, imageUrl: string, style: string, numFrames: number, audience?: string) {
-    let imagePart = null;
-    if (imageUrl) {
-        const base64 = await fetchImageBase64(imageUrl);
-        imagePart = { inline_data: { mime_type: "image/jpeg", data: base64 } };
+async function planSequence(prompt: string, imageUrls: string[] | undefined, style: string, numFrames: number, audience?: string) {
+    const imagesParts = [];
+    if (imageUrls && imageUrls.length > 0) {
+        for (const url of imageUrls) {
+            const base64 = await fetchImageBase64(url);
+            imagesParts.push({ inline_data: { mime_type: "image/jpeg", data: base64 } });
+        }
     }
 
     const systemInstruction = `You are a professional visual planner (Director AI). 
@@ -231,7 +234,7 @@ OUTPUT FORMAT (JSON):
 `;
 
     const parts = [{ text: `Prompt: ${prompt}\n\n${systemInstruction}` }];
-    if (imagePart) parts.push(imagePart);
+    if (imagesParts.length > 0) parts.push(...imagesParts);
 
     const contents = [{ role: "user", parts }];
     return await callGemini(contents, { json: true });
@@ -355,7 +358,18 @@ async function checkVideoStatus(taskId: string) {
 }
 
 
-async function chatWithDirector(history: any[], lastUserMessage: string, imageUrl?: string) {
+async function chatWithDirector(history: any[], lastUserMessage: string, imageUrls?: string[], specs?: any, settings?: any) {
+    const imagesParts = [];
+    if (imageUrls && imageUrls.length > 0) {
+        for (const url of imageUrls) {
+            try {
+                const base64 = await fetchImageBase64(url);
+                imagesParts.push({ inline_data: { mime_type: "image/jpeg", data: base64 } });
+            } catch (e) {
+                console.error("Failed to load image for chat", e);
+            }
+        }
+    }
     // Flatten history to Gemini format if needed, or just append recent context
     // Gemini supports multi-turn via 'contents' array with 'user'/'model' roles.
 
@@ -420,14 +434,8 @@ async function chatWithDirector(history: any[], lastUserMessage: string, imageUr
     // Add current message
     const currentParts: any[] = [{ text: `System: ${systemPrompt}\nUser: ${lastUserMessage}` }];
 
-    if (imageUrl) {
-        try {
-            const base64 = await fetchImageBase64(imageUrl);
-            currentParts.push({ inline_data: { mime_type: "image/jpeg", data: base64 } });
-        } catch (e) {
-            console.error("Failed to load image for chat", e);
-            // Continue without image
-        }
+    if (imagesParts.length > 0) {
+        currentParts.push(...imagesParts);
     }
 
     const contents = [

@@ -75,7 +75,7 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
     ])
     const [input, setInput] = useState("")
     const [isLoading, setIsLoading] = useState(false)
-    const [uploadedImage, setUploadedImage] = useState<string | null>(null)
+    const [uploadedImages, setUploadedImages] = useState<string[]>([])
     const messagesEndRef = useRef<HTMLDivElement>(null)
 
     // Missing state variables added
@@ -124,8 +124,8 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
             role: 'user',
             content: input,
             id: crypto.randomUUID(),
-            type: uploadedImage ? 'image' : 'text',
-            mediaUrl: uploadedImage || undefined
+            type: uploadedImages.length > 0 ? 'image' : 'text',
+            mediaUrls: uploadedImages.length > 0 ? uploadedImages : undefined
         }
         setMessages(prev => [...prev, userMsg])
         setInput("")
@@ -142,7 +142,7 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
                 body: JSON.stringify({
                     action: "chat",
                     prompt: input,
-                    image_url: uploadedImage || undefined,
+                    image_urls: uploadedImages.length > 0 ? uploadedImages : undefined,
                     history: messages.map(m => ({ role: m.role, content: m.content })),
                     specs: manualSpecs, // Send manual overrides
                     settings: genSettings // Send aspect ratio/resolution
@@ -178,7 +178,7 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
                 id: crypto.randomUUID(),
                 storyboard: storyboardInfo // Pass the AI-generated storyboard
             }])
-            if (uploadedImage) setUploadedImage(null)
+            if (uploadedImages.length > 0) setUploadedImages([])
 
         } catch (error) {
             console.error("Chat error:", error)
@@ -299,11 +299,15 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
     };
 
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0]
-        if (file) {
-            const reader = new FileReader()
-            reader.onloadend = () => setUploadedImage(reader.result as string)
-            reader.readAsDataURL(file)
+        const files = Array.from(e.target.files || [])
+        if (files.length > 0) {
+            files.forEach(file => {
+                const reader = new FileReader()
+                reader.onloadend = () => {
+                    setUploadedImages(prev => [...prev, reader.result as string])
+                }
+                reader.readAsDataURL(file)
+            })
         }
     }
 
@@ -367,9 +371,13 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
                                     <div className="whitespace-pre-wrap">{msg.content}</div>
 
                                     {/* Render Media Preview if User Uploaded */}
-                                    {msg.type === 'image' && msg.mediaUrl && (
-                                        <div className="mt-3 rounded-lg overflow-hidden border border-gray-200 shadow-sm md:max-w-sm">
-                                            <img src={msg.mediaUrl} alt="Upload" className="w-full h-auto object-cover" />
+                                    {msg.type === 'image' && msg.mediaUrls && (
+                                        <div className="mt-3 flex flex-wrap gap-2 md:max-w-xl">
+                                            {msg.mediaUrls.map((url, i) => (
+                                                <div key={i} className="w-24 h-24 rounded-lg overflow-hidden border border-gray-200 shadow-sm relative group">
+                                                    <img src={url} alt={`Upload ${i}`} className="w-full h-full object-cover" />
+                                                </div>
+                                            ))}
                                         </div>
                                     )}
 
@@ -479,10 +487,7 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
                                 <input
                                     id="file-upload"
                                     type="file"
-                                    accept="image/*"
-                                    className="hidden"
-                                    onChange={handleFileUpload}
-                                />
+                                    multiple
                                 <button
                                     onClick={() => document.getElementById('file-upload')?.click()}
                                     className="w-11 h-11 flex items-center justify-center rounded-2xl bg-gray-100 text-gray-400 hover:text-purple-600 hover:bg-purple-50 transition-all border border-gray-100"
@@ -492,15 +497,19 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
                             </div>
 
                             <div className="flex-1 flex flex-col relative min-h-[44px]">
-                                {uploadedImage && (
-                                    <div className="mb-2 relative group w-fit">
-                                        <img src={uploadedImage} alt="Upload preview" className="h-16 rounded-xl border border-gray-200 shadow-sm" />
-                                        <button
-                                            onClick={() => setUploadedImage(null)}
-                                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                                        >
-                                            <X className="w-3 h-3" />
-                                        </button>
+                                {uploadedImages.length > 0 && (
+                                    <div className="mb-3 flex flex-wrap gap-2">
+                                        {uploadedImages.map((img, idx) => (
+                                            <div key={idx} className="relative group">
+                                                <img src={img} alt={`Preview ${idx}`} className="h-16 w-16 object-cover rounded-xl border border-gray-200 shadow-sm" />
+                                                <button
+                                                    onClick={() => setUploadedImages(prev => prev.filter((_, i) => i !== idx))}
+                                                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                                >
+                                                    <X className="w-3 h-3" />
+                                                </button>
+                                            </div>
+                                        ))}
                                     </div>
                                 )}
                                 <textarea
@@ -579,7 +588,7 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
 
                                 <Button
                                     onClick={handleSendMessage}
-                                    disabled={isLoading || (!input && !uploadedImage)}
+                                    disabled={isLoading || (!input && uploadedImages.length === 0)}
                                     className="custom-gradient-btn rounded-2xl px-6 h-10 font-bold text-xs uppercase tracking-tight active:scale-95 flex items-center gap-2"
                                 >
                                     <span>{isLoading ? "Thinking..." : "Generate"}</span>
