@@ -15,13 +15,23 @@ interface StoryboardGridProps {
 }
 
 export function StoryboardGrid({ sequence, onFrameUpdate }: StoryboardGridProps) {
-    if (!sequence) return null;
-
     // Safe access to frames, handling potential structure mismatch
     // The sequence might be the plan itself (flat) or contain a plan property
-    const planData = (sequence as any).plan || sequence;
+    const planData = sequence ? ((sequence as any).plan || sequence) : null;
     const initialFrames = planData?.frames || [];
     const initialBackgrounds = planData?.backgrounds || [];
+
+    // If no valid frames found, return Error UI instead of null
+    if (!sequence || initialFrames.length === 0) {
+        return (
+            <div className="mt-4 p-4 border border-red-200 bg-red-50 rounded-xl text-red-600 flex items-center gap-3 shadow-sm">
+                <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                <div className="text-sm font-medium">
+                    Storyboard plan could not be generated. Please try confusing the AI less or refining your prompt. 🎬
+                </div>
+            </div>
+        )
+    }
 
     const [frames, setFrames] = useState<StoryboardFrameDetails[]>(initialFrames)
     const [generatingIds, setGeneratingIds] = useState<number[]>([])
