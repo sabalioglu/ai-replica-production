@@ -488,6 +488,9 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
                                     id="file-upload"
                                     type="file"
                                     multiple
+                                    className="hidden"
+                                    onChange={handleFileUpload}
+                                />
                                 <button
                                     onClick={() => document.getElementById('file-upload')?.click()}
                                     className="w-11 h-11 flex items-center justify-center rounded-2xl bg-gray-100 text-gray-400 hover:text-purple-600 hover:bg-purple-50 transition-all border border-gray-100"
@@ -599,6 +602,6 @@ export function DirectorChat({ onFinalize }: DirectorChatProps) {
                     </div>
                 </div>
             </div>
-        </div>
+        </div >
     )
 }
