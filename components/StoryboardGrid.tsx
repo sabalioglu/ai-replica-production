@@ -16,34 +16,53 @@ interface StoryboardGridProps {
 
 export function StoryboardGrid({ sequence, onFrameUpdate }: StoryboardGridProps) {
     const [frames, setFrames] = useState<StoryboardFrameDetails[]>(sequence.plan.frames)
-    const [isGenerating, setIsGenerating] = useState<number | null>(null)
+    const [generatingIds, setGeneratingIds] = useState<number[]>([])
     const [bgUrls, setBgUrls] = useState<Record<string, string>>({})
 
-    const generateAll = async () => {
-        // Step 1: Generate Backgrounds
-        const newBgUrls: Record<string, string> = { ...bgUrls }
-        for (const bg of sequence.plan.backgrounds) {
-            if (newBgUrls[bg.id]) continue;
+    const [hasStarted, setHasStarted] = useState(false)
 
-            const { data, error } = await supabase.functions.invoke('cinema-popcorn', {
-                body: {
-                    action: 'generate_background',
-                    background_plan: bg,
-                    style: "Cinematic Realistic"
-                }
-            })
-            if (data?.url) newBgUrls[bg.id] = data.url
+    useEffect(() => {
+        if (!hasStarted && !frames.every(f => f.url)) {
+            generateAll()
         }
+    }, [hasStarted, frames])
+
+    const generateAll = async () => {
+        if (hasStarted) return
+        setHasStarted(true)
+
+        // Step 1: Generate Backgrounds (Parallel)
+        const newBgUrls: Record<string, string> = { ...bgUrls }
+
+        await Promise.all(sequence.plan.backgrounds.map(async (bg) => {
+            if (newBgUrls[bg.id]) return;
+            try {
+                const { data } = await supabase.functions.invoke('cinema-popcorn', {
+                    body: {
+                        action: 'generate_background',
+                        background_plan: bg,
+                        style: "Cinematic Realistic"
+                    }
+                })
+                if (data?.url) newBgUrls[bg.id] = data.url
+            } catch (e) {
+                console.error(`Bg ${bg.id} failed`, e)
+            }
+        }))
+
         setBgUrls(newBgUrls)
 
-        // Step 2: Generate Frames sequentially to maintain consistency
-        for (const frame of frames) {
-            if (frame.url) continue;
+        // Step 2: Generate Frames (Parallel with Concurrency Limit)
+        const PENDING_LIMIT = 3; // Max concurrent requests
+        const queue = frames.filter(f => !f.url).map(f => f.frame_number);
 
-            setIsGenerating(frame.frame_number)
+        const processFrame = async (frameNum: number) => {
+            const frame = frames.find(f => f.frame_number === frameNum);
+            if (!frame) return;
 
+            setGeneratingIds(prev => [...prev, frameNum])
             try {
-                const { data, error } = await supabase.functions.invoke('cinema-popcorn', {
+                const { data } = await supabase.functions.invoke('cinema-popcorn', {
                     body: {
                         action: 'generate_frame',
                         frame_plan: frame,
@@ -56,15 +75,24 @@ export function StoryboardGrid({ sequence, onFrameUpdate }: StoryboardGridProps)
                 if (data?.url) {
                     const updatedUrl = data.url
                     setFrames(prev => prev.map(f =>
-                        f.frame_number === frame.frame_number ? { ...f, url: updatedUrl } : f
+                        f.frame_number === frameNum ? { ...f, url: updatedUrl } : f
                     ))
-                    onFrameUpdate?.(frame.frame_number, updatedUrl)
+                    onFrameUpdate?.(frameNum, updatedUrl)
                 }
             } catch (err) {
                 console.error("Frame Gen Error:", err)
+            } finally {
+                setGeneratingIds(prev => prev.filter(id => id !== frameNum))
             }
+        };
+
+        // Simple batching for concurrency
+        for (let i = 0; i < queue.length; i += PENDING_LIMIT) {
+            const batch = queue.slice(i, i + PENDING_LIMIT);
+            await Promise.all(batch.map(id => processFrame(id)));
         }
-        setIsGenerating(null)
+
+        setHasStarted(false) // Allow retry if needed
     }
 
     return (
@@ -81,11 +109,11 @@ export function StoryboardGrid({ sequence, onFrameUpdate }: StoryboardGridProps)
                     <Button
                         size="sm"
                         onClick={generateAll}
-                        disabled={isGenerating !== null}
+                        disabled={generatingIds.length > 0}
                         className="bg-indigo-600 hover:bg-indigo-500 text-white gap-2"
                     >
-                        {isGenerating !== null ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                        Generate Sequence
+                        {generatingIds.length > 0 ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                        {generatingIds.length > 0 ? "Generating Sequence..." : "Generate Sequence"}
                     </Button>
                 )}
             </div>
@@ -98,7 +126,7 @@ export function StoryboardGrid({ sequence, onFrameUpdate }: StoryboardGridProps)
                                 <img src={frame.url} alt={`Frame ${frame.frame_number}`} className="w-full h-full object-cover" />
                             ) : (
                                 <div className="flex flex-col items-center gap-2 text-zinc-600">
-                                    {isGenerating === frame.frame_number ? (
+                                    {generatingIds.includes(frame.frame_number) ? (
                                         <>
                                             <Loader2 className="w-6 h-6 animate-spin text-indigo-400" />
                                             <span className="text-[10px] uppercase tracking-widest font-bold text-indigo-400/80">Generating...</span>
