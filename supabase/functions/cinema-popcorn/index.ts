@@ -267,6 +267,7 @@ Photorealistic, movie still, 8k, highly detailed.`;
     return await generateWithKie({
         prompt: prompt,
         image_input: inputImages, // Using correct parameter from docs
+        image_strength: 0.35, // Reduce influence to allow composition changes (Standard is usually 0.5-0.7)
         aspect_ratio: "16:9",
         resolution: "2K",
         output_format: "png"
