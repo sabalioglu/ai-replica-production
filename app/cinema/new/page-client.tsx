@@ -65,26 +65,17 @@ export default function CinemaNewProjectClient() {
 
     if (isCreating) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
-                <Loader2 className="h-12 w-12 animate-spin text-purple-500" />
-                <h2 className="text-2xl font-bold text-white">Setting up your Studio...</h2>
-                <p className="text-zinc-400">The Director is preparing your shotlist.</p>
+            <div className="flex flex-col items-center justify-center min-h-screen space-y-4 bg-white">
+                <Loader2 className="h-12 w-12 animate-spin text-purple-600" />
+                <h2 className="text-2xl font-bold text-gray-900">Setting up your Studio...</h2>
+                <p className="text-gray-500">The Director is preparing your shotlist.</p>
             </div>
         )
     }
 
     return (
-        <div className="max-w-6xl mx-auto py-8 px-4">
-            <div className="mb-8 text-center space-y-2">
-                <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl text-white">
-                    New Cinematic Project
-                </h1>
-                <p className="text-lg text-zinc-400 max-w-2xl mx-auto">
-                    Collaborate with our AI Director to plan your perfect video ad.
-                </p>
-            </div>
-
+        <main className="min-h-screen bg-white">
             <DirectorChat onFinalize={handleFinalize} />
-        </div>
+        </main>
     )
 }
